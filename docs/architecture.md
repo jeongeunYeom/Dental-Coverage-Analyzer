@@ -73,6 +73,19 @@ confidence에는 반드시 사람이 읽을 수 있는 `confidence_reason`을 �
 
 ## 10. 테스트 전략과 단계
 
-현재 단계는 모델 불변조건, 한국식 금액 변환, 정상/부분/숫자 위주 깨짐/이미지 페이지 품질 판정 및 JSON fixture 로딩을 단위 테스트한다. fixture는 실제 개인정보가 없는 합성 텍스트다.
+현재 단계는 모델 불변조건, 한국식 금액 변환, 정상/부분/숫자 위주 깨짐/이미지 페이지 품질 판정, 좌표 추출, 페이지 분류, 후보 탐지, JSON/CLI를 테스트한다. PDF fixture는 저장소에 넣지 않고 PyMuPDF로 실행 중 생성한다.
 
-후속 단계는 순서대로 (1) 좌표 Text/Layout extractor, (2) 로컬 OCR adapter, (3) page classifier, (4) Meritz/Samsung Aggregate parser, (5) 계약/Product parser, (6) 치아 상품·Rider detector, (7) normalization/dedup/cross-reference/validation을 구현하며 각 단계에서 회귀 테스트를 통과한 뒤 진행한다. Parser 검증 후에만 한국어 GUI, source highlight viewer, 보고서, PyInstaller 패키징을 구현한다.
+후속 단계는 순서대로 (1) 로컬 OCR adapter 구현, (2) Meritz/Samsung Aggregate parser, (3) 계약/Product parser, (4) 치아 상품·Rider detector, (5) normalization/dedup/cross-reference/validation을 구현하며 각 단계에서 회귀 테스트를 통과한 뒤 진행한다. Parser 검증 후에만 한국어 GUI, source highlight viewer, 보고서, PyInstaller 패키징을 구현한다.
+
+## 11. PDF Parsing Foundation 구현 상태
+
+`PDFLoader`가 경로·metadata·암호화·페이지 수와 1-base 페이지 접근을 관리하고,
+`LayoutExtractor`가 plain text와 word/block bbox를 보존한다. 각 페이지는 기존
+Text Quality 분석 직후 설정 기반 `PageClassifier` 및 치아/보험사/상품 후보 탐지를
+거쳐 `PDFPageData`가 된다. `analyze_pdf(path)`는 이 결과와 품질/유형 집계를
+`PDFAnalysisResult`로 반환하며, 로컬 debug JSON 내보내기와 CLI를 제공한다.
+
+OCR은 이번 단계에서 adapter protocol과 명시적인 `NOT_CONFIGURED` 구현만 제공한다.
+OCR 필요 페이지를 숨기거나 Text Layer를 정상으로 가장하지 않으며, 다음 단계에서
+로컬 OCR 구현을 이 interface에 연결한다. 이후 Aggregate/Contract/Rider parser는
+페이지 원문과 좌표 및 후보 confidence를 그대로 입력으로 사용한다.

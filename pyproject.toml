@@ -9,6 +9,9 @@ description = "로컬 전용 치아보험 보장분석 도구"
 requires-python = ">=3.11"
 dependencies = ["PyMuPDF>=1.24"]
 
+[project.scripts]
+dental-coverage-analyzer = "dental_coverage_analyzer.__main__:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
