@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import re
 
-from dental_coverage_analyzer.core.resources import config_path
+from dental_coverage_analyzer.core.resources import load_config
 from dental_coverage_analyzer.models import Confidence, ExtractionCandidate, PDFWord
 
 
@@ -27,8 +27,8 @@ class PageSignalDetector:
         dental_file: str | Path | None = None,
         insurer_file: str | Path | None = None,
     ) -> None:
-        dental = _load_json(dental_file or config_path("dental_keywords.json"))
-        insurer = _load_json(insurer_file or config_path("insurer_patterns.json"))
+        dental = _load_json(dental_file) if dental_file else load_config("dental_keywords.json")
+        insurer = _load_json(insurer_file) if insurer_file else load_config("insurer_patterns.json")
         self.dental_keywords: list[str] = dental["include"]
         self.dental_exclusions: list[str] = dental["exclude"]
         self.product_keywords: list[str] = dental["product"]

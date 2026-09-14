@@ -3,15 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dental_coverage_analyzer.core.resources import config_path
+from dental_coverage_analyzer.core.resources import load_config
 from dental_coverage_analyzer.models import CauseType, PaymentUnit
 
 
 class DentalCategoryClassifier:
     def __init__(self, categories_file: str | Path | None = None) -> None:
-        path = Path(categories_file) if categories_file else config_path("dental_categories.json")
-        with path.open(encoding="utf-8") as stream:
-            self.categories: dict[str, list[str]] = json.load(stream)
+        if categories_file:
+            with Path(categories_file).open(encoding="utf-8") as stream:
+                self.categories = json.load(stream)
+        else:
+            self.categories = load_config("dental_categories.json")
 
     def classify(self, raw_name: str) -> str:
         compact = "".join(raw_name.casefold().split())
@@ -46,4 +48,3 @@ def extract_payment_unit(text: str) -> PaymentUnit:
     if "연간1회" in compact or "연1회" in compact:
         return PaymentUnit.PER_YEAR
     return PaymentUnit.UNKNOWN
-

@@ -6,6 +6,7 @@ from dental_coverage_analyzer.core.money import parse_money
 from dental_coverage_analyzer.models import (
     AggregateCoverage,
     Confidence,
+    EffectiveTextSource,
     PDFDocumentData,
     PageType,
     SourceReference,
@@ -79,7 +80,7 @@ def _labeled(segment: str, labels: str) -> tuple[str | None, int | None]:
 def _layout_amounts(page, normalized_name: str, inherited_unit: str | None) -> dict[str, tuple[str, int]]:
     """동일 line의 cell을 header x 좌표에 대응한다. 근거가 부족하면 빈 결과다."""
     lines: dict[tuple[int, int], list] = {}
-    for word in page.words:
+    for word in page.effective_words or page.words:
         lines.setdefault((word.block_no, word.line_no), []).append(word)
     header_columns: dict[str, float] = {}
     for words in lines.values():
@@ -117,7 +118,7 @@ def _layout_amounts(page, normalized_name: str, inherited_unit: str | None) -> d
 
 def _row_bbox(page, normalized_name: str) -> tuple[float, float, float, float] | None:
     lines: dict[tuple[int, int], list] = {}
-    for word in page.words:
+    for word in page.effective_words or page.words:
         lines.setdefault((word.block_no, word.line_no), []).append(word)
     for words in lines.values():
         joined = "".join(word.text.replace(" ", "") for word in words)
@@ -138,18 +139,19 @@ class AggregateCoverageParser:
         for page in document.pages:
             if page.page_type not in _PAGE_TYPES:
                 continue
-            matches = list(_NAME.finditer(page.text))
+            text = page.effective_text or page.text
+            matches = list(_NAME.finditer(text))
             if not matches:
                 continue
-            unit = _table_unit(page.text)
-            header_text = page.text[:matches[0].start()]
+            unit = _table_unit(text)
+            header_text = text[:matches[0].start()]
             header_labels = [
                 label for label in ("권장", "가입", "부족", "과부족")
                 if label in header_text
             ]
             for index, match in enumerate(matches):
-                end = matches[index + 1].start() if index + 1 < len(matches) else len(page.text)
-                segment = page.text[match.start():end].strip()
+                end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+                segment = text[match.start():end].strip()
                 raw_name = match.group(0).strip()
                 recommended_raw, recommended = _labeled(segment, r"권장(?:\s*가입)?금액|권장")
                 enrolled_segment = re.sub(
@@ -233,7 +235,9 @@ class AggregateCoverageParser:
                 confidence = Confidence.HIGH if evidence in {
                     "명시적 필드 label", "동일 행 cell과 header의 bbox 열 관계",
                 } else Confidence.MEDIUM
-                if page.ocr_required:
+                if page.effective_source is EffectiveTextSource.OCR:
+                    confidence = Confidence.MEDIUM if page.confidence is not Confidence.LOW else Confidence.LOW
+                elif page.ocr_required:
                     confidence = Confidence.LOW
                 candidates.append(AggregateCoverage(
                     raw_name=raw_name,
@@ -255,7 +259,10 @@ class AggregateCoverageParser:
                         page.page_number, _row_bbox(page, _normalize_name(raw_name)), segment,
                     ),
                     confidence=confidence,
-                    confidence_reason=evidence if not page.ocr_required else "OCR 필요 페이지의 Text Layer 결과",
+                    confidence_reason=(
+                        f"OCR 기반; {evidence}" if page.effective_source is EffectiveTextSource.OCR
+                        else evidence if not page.ocr_required else "OCR 필요 페이지의 Text Layer 결과"
+                    ),
                 ))
         deduplicated, duplicate_issues = deduplicate_aggregate_coverages(candidates)
         return ParserOutput(deduplicated, issues + duplicate_issues)

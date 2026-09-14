@@ -2,7 +2,8 @@ from pathlib import Path
 
 from dental_coverage_analyzer.core.dental import DentalProductDetector
 from dental_coverage_analyzer.core.parsers.generic_parser import GenericParser
-from dental_coverage_analyzer.models import CauseType, PDFDocumentData, PDFPageData, PageType, PaymentUnit
+from dental_coverage_analyzer.core.parsers.rider_parser import deduplicate_dental_riders
+from dental_coverage_analyzer.models import CauseType, DentalRider, PDFDocumentData, PDFPageData, PageType, PaymentUnit, SourceReference
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -78,3 +79,55 @@ def test_aggregate_and_rider_are_both_preserved():
     assert len(result.dental_riders) == 1
     assert result.aggregate_coverages[0].enrolled_amount == 370_000
     assert result.dental_riders[0].enrolled_amount == 90_000
+
+
+def test_samsung_regression_categories():
+    cases = {
+        "임플란트": "보철치료", "브릿지": "보철치료", "틀니": "보철치료",
+        "크라운": "보존치료", "인레이": "보존치료", "온레이": "보존치료",
+        "컴퍼짓레진": "보존치료", "아말감 충전": "보존치료",
+        "직접치아충전": "보존치료", "간접치아충전": "보존치료",
+        "근관치료": "근관/치수치료", "치수절단술": "근관/치수치료",
+        "치주소파술": "치주치료", "치주질환수술보험금": "치주치료",
+        "단순 발치": "발치", "정교한 발치": "발치",
+        "완전히 매복된 치아의 발치": "발치", "파노라마 사진촬영": "검사/영상",
+        "구내방사선": "검사/영상", "교익방사선": "검사/영상",
+        "스케일링": "예방", "종합구강검진": "검사/영상",
+        "보철물 재부착": "기타 치과",
+    }
+    from dental_coverage_analyzer.core.dental import DentalCategoryClassifier
+    classifier = DentalCategoryClassifier()
+    assert {name: classifier.classify(name) for name in cases} == cases
+
+
+def test_rider_duplicates_merge_sources_without_summing_and_keep_distinct_units():
+    first = DentalRider(
+        "(질병)단순 발치", normalized_name="(질병)단순발치", enrolled_amount=10_000,
+        cause_type=CauseType.DISEASE, payment_unit=PaymentUnit.PER_TOOTH,
+        contract_identity="synthetic", sources=[SourceReference(2)],
+    )
+    repeated = DentalRider(
+        "(질병)단순 발치", normalized_name="(질병)단순발치", enrolled_amount=10_000,
+        cause_type=CauseType.DISEASE, payment_unit=PaymentUnit.PER_TOOTH,
+        contract_identity="synthetic", sources=[SourceReference(5)],
+    )
+    per_occurrence = DentalRider(
+        "(질병)단순 발치", normalized_name="(질병)단순발치", enrolled_amount=10_000,
+        cause_type=CauseType.DISEASE, payment_unit=PaymentUnit.PER_OCCURRENCE,
+        contract_identity="synthetic", sources=[SourceReference(7)],
+    )
+    riders, issues = deduplicate_dental_riders([first, repeated, per_occurrence])
+    assert len(riders) == 2
+    assert riders[0].enrolled_amount == 10_000
+    assert [source.page for source in riders[0].sources] == [2, 5]
+    assert issues == []
+
+
+def test_rider_amount_conflict_is_kept_for_review():
+    riders = [
+        DentalRider("컴퍼짓레진", normalized_name="컴퍼짓레진", enrolled_amount=90_000, contract_identity="c"),
+        DentalRider("컴퍼짓레진", normalized_name="컴퍼짓레진", enrolled_amount=190_000, contract_identity="c"),
+    ]
+    results, issues = deduplicate_dental_riders(riders)
+    assert len(results) == 2
+    assert any(issue.code == "RIDER_DUPLICATE_CONFLICT" for issue in issues)

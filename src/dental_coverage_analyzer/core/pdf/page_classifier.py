@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from dental_coverage_analyzer.core.resources import config_path
+from dental_coverage_analyzer.core.resources import load_config
 from dental_coverage_analyzer.models import Confidence, PageType
 
 
@@ -18,9 +18,11 @@ class PageClassification:
 
 class PageClassifier:
     def __init__(self, patterns_file: str | Path | None = None) -> None:
-        path = Path(patterns_file) if patterns_file else config_path("page_patterns.json")
-        with path.open(encoding="utf-8") as stream:
-            self.patterns: dict[str, dict[str, object]] = json.load(stream)
+        if patterns_file:
+            with Path(patterns_file).open(encoding="utf-8") as stream:
+                self.patterns = json.load(stream)
+        else:
+            self.patterns = load_config("page_patterns.json")
 
     def classify(self, text: str) -> PageClassification:
         normalized = " ".join((text or "").casefold().split())
@@ -56,4 +58,3 @@ class PageClassifier:
             PageType(winner), scores, confidence,
             f"일치 키워드: {', '.join(matched[winner])}; 점수 {scores[winner]:g}",
         )
-

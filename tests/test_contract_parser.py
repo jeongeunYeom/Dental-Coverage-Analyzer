@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 
 from dental_coverage_analyzer.core.parsers.contract_parser import InsuranceContractParser
-from dental_coverage_analyzer.models import PDFDocumentData, PDFPageData, PageType
+from dental_coverage_analyzer.models import PDFDocumentData, PDFPageData, PDFWord, PageType
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -53,3 +53,65 @@ def test_table_headers_are_not_invented_as_contract_values():
     )
     document = PDFDocumentData(__file__, "synthetic.pdf", 1, {}, False, [page])
     assert InsuranceContractParser().parse(document).items == []
+
+
+def test_bbox_contract_matrix_maps_headers_to_cells():
+    words = [
+        PDFWord("보험회사", 10, 20, 70, 30, 0, 0, 0),
+        PDFWord("상품명", 150, 20, 200, 30, 0, 0, 1),
+        PDFWord("보험기간", 330, 20, 390, 30, 0, 0, 2),
+        PDFWord("월보험료", 450, 20, 510, 30, 0, 0, 3),
+        PDFWord("합성손해보험", 10, 50, 80, 60, 1, 0, 0),
+        PDFWord("합성치아보험", 150, 50, 230, 60, 1, 0, 1),
+        PDFWord("2025~2060", 330, 50, 410, 60, 1, 0, 2),
+        PDFWord("17,610원", 450, 50, 510, 60, 1, 0, 3),
+    ]
+    page = PDFPageData(
+        1, 600, 700, "보험회사 상품명 보험기간 월보험료",
+        words=words, effective_words=words, page_type=PageType.PRODUCT_MATRIX,
+        text_quality="TEXT_OK", ocr_required=False,
+    )
+    document = PDFDocumentData(__file__, "synthetic.pdf", 1, {}, False, [page])
+    contract = InsuranceContractParser().parse(document).items[0]
+    assert contract.insurer == "합성손해보험"
+    assert contract.product_name == "합성치아보험"
+    assert contract.coverage_period == "2025~2060"
+    assert contract.monthly_premium == 17_610
+    assert contract.sources[0].bbox == (10, 50, 510, 60)
+
+
+def test_vertical_product_matrix_extracts_multiple_contract_columns_only_with_equal_cells():
+    words = [
+        PDFWord("보험회사", 10, 20, 70, 30, 0, 0, 0),
+        PDFWord("합성손해보험", 150, 20, 240, 30, 0, 0, 1),
+        PDFWord("예시생명보험", 350, 20, 440, 30, 0, 0, 2),
+        PDFWord("상품명", 10, 50, 70, 60, 1, 0, 0),
+        PDFWord("첫째치아보험", 150, 50, 240, 60, 1, 0, 1),
+        PDFWord("둘째치아보험", 350, 50, 440, 60, 1, 0, 2),
+        PDFWord("월보험료", 10, 80, 70, 90, 2, 0, 0),
+        PDFWord("10,000원", 150, 80, 240, 90, 2, 0, 1),
+        PDFWord("20,000원", 350, 80, 440, 90, 2, 0, 2),
+    ]
+    page = PDFPageData(
+        1, 600, 700, "보험회사 상품명 월보험료", words=words, effective_words=words,
+        page_type=PageType.PRODUCT_MATRIX, text_quality="TEXT_OK", ocr_required=False,
+    )
+    document = PDFDocumentData(__file__, "synthetic.pdf", 1, {}, False, [page])
+    contracts = InsuranceContractParser().parse(document).items
+    assert [(item.insurer, item.monthly_premium) for item in contracts] == [
+        ("합성손해보험", 10_000), ("예시생명보험", 20_000),
+    ]
+
+
+def test_same_product_on_different_pages_is_not_merged_without_identity_fields():
+    pages = [
+        PDFPageData(
+            number, 500, 700, "보험회사: 합성손해보험\n상품명: 동일 치아보험",
+            page_type=PageType.PRODUCT_DETAIL, text_quality="TEXT_OK", ocr_required=False,
+        )
+        for number in (1, 2)
+    ]
+    document = PDFDocumentData(__file__, "synthetic.pdf", 2, {}, False, pages)
+    result = InsuranceContractParser().parse(document)
+    assert len(result.items) == 2
+    assert any(issue.code == "CONTRACT_IDENTITY_CONFLICT" for issue in result.issues)

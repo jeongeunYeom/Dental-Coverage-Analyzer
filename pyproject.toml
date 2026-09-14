@@ -22,3 +22,7 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.setuptools.package-data]
+"dental_coverage_analyzer.resources.config" = ["*.json"]
+"dental_coverage_analyzer.resources" = ["tesseract/**/*"]

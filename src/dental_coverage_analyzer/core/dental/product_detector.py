@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from dental_coverage_analyzer.core.resources import config_path
+from dental_coverage_analyzer.core.resources import load_config
 from dental_coverage_analyzer.models import Confidence
 
 
@@ -18,9 +18,12 @@ class DentalProductDetection:
 
 class DentalProductDetector:
     def __init__(self, keywords_file: str | Path | None = None) -> None:
-        path = Path(keywords_file) if keywords_file else config_path("dental_keywords.json")
-        with path.open(encoding="utf-8") as stream:
-            self.keywords: tuple[str, ...] = tuple(json.load(stream)["product"])
+        if keywords_file:
+            with Path(keywords_file).open(encoding="utf-8") as stream:
+                config = json.load(stream)
+        else:
+            config = load_config("dental_keywords.json")
+        self.keywords = tuple(config["product"])
 
     def detect(self, product_name: str | None) -> DentalProductDetection:
         if not product_name:
@@ -35,4 +38,3 @@ class DentalProductDetector:
                 f"상품명에서 치아보험 키워드 확인: {', '.join(matched)}",
             )
         return DentalProductDetection(False, Confidence.LOW, (), "치아보험 상품 키워드 없음")
-

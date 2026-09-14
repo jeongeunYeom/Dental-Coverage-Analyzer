@@ -43,6 +43,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"전체 치아보장 수: {len(result.aggregate_coverages)}")
     print(f"세부 치아담보 수: {len(result.dental_riders)}")
     print(f"확인 필요 항목 수: {len(result.validation_issues)}")
+    print(f"Provider: {result.provider} ({result.provider_confidence.value})")
+    if result.support_summary:
+        summary = result.support_summary
+        print(
+            "OCR 처리: "
+            f"시도 {summary.ocr_attempted_pages}, 성공 {summary.ocr_success_pages}, "
+            f"실패/미설정 {summary.ocr_failed_pages}"
+        )
+        print(f"지원 수준: {summary.support_level.value}")
     if args.json_path:
         print(f"JSON 저장: {result.export_json(args.json_path)}")
     return 0

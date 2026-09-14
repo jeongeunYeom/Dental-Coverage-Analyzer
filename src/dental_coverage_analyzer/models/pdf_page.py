@@ -23,6 +23,12 @@ class PageType(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class EffectiveTextSource(StrEnum):
+    TEXT_LAYER = "TEXT_LAYER"
+    OCR = "OCR"
+    MERGED = "MERGED"
+
+
 @dataclass(frozen=True, slots=True)
 class PDFWord:
     text: str
@@ -82,6 +88,37 @@ class PDFPageData:
     product_candidates: list[ExtractionCandidate] = field(default_factory=list)
     confidence: Confidence = Confidence.LOW
     confidence_reason: str = "페이지 분석 전"
+    text_layer_text: str | None = None
+    ocr_text: str | None = None
+    effective_text: str | None = None
+    effective_source: EffectiveTextSource = EffectiveTextSource.TEXT_LAYER
+    ocr_status: str = "NOT_ATTEMPTED"
+    ocr_confidence: float | None = None
+    ocr_reason: str | None = None
+    ocr_words: list[PDFWord] = field(default_factory=list)
+    effective_words: list[PDFWord] = field(default_factory=list)
+    ocr_text_quality: str | None = None
+    effective_text_quality: str | None = None
+    row_reconstruction_summary: dict[str, Any] = field(default_factory=dict)
+    parser_hints: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.text_layer_text is None:
+            self.text_layer_text = self.text
+        if self.effective_text is None:
+            self.effective_text = self.text
+        if not self.effective_words:
+            self.effective_words = list(self.words)
+        if self.effective_text_quality is None:
+            self.effective_text_quality = self.text_quality
+
+    def use_effective_text(
+        self, text: str, source: EffectiveTextSource, words: list[PDFWord] | None = None,
+    ) -> None:
+        self.effective_text = text
+        self.effective_source = source
+        if words is not None:
+            self.effective_words = words
 
 
 @dataclass(slots=True)
@@ -92,4 +129,3 @@ class PDFDocumentData:
     metadata: dict[str, str | None]
     is_encrypted: bool
     pages: list[PDFPageData] = field(default_factory=list)
-

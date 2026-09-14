@@ -104,3 +104,48 @@ Rider는 보험사 원본 담보명으로 치아 여부와 category를 판단하
 필드로 보존한다. 질병/상해 및 지급단위도 별도 필드이므로 서로 다른 담보를 합치지 않는다.
 동일 페이지에 계약이 여러 개이거나 OCR이 필요한 등 연결 근거가 부족한 경우 보험사와
 상품명을 추측하지 않고 LOW confidence 및 확인 필요 항목으로 남긴다.
+
+## 13. Local OCR 및 provenance
+
+`analyze_pdf`는 Text Quality가 OCR 필요로 판정한 페이지만 250 DPI PNG로 한 번
+렌더링한다. 픽셀 상한을 넘으면 DPI를 낮춘다. Tesseract backend는 bundle, 명시 경로,
+시스템 PATH 순으로 실행 파일을 찾으며 자동 다운로드나 네트워크 통신을 하지 않는다.
+실행 파일·언어 데이터 부재와 실행 실패를 각각 `NOT_CONFIGURED`, `FAILED`로 반환한다.
+
+`PDFPageData`는 `text_layer_text`, `ocr_text`, `effective_text` 및
+`TEXT_LAYER`/`OCR`/`MERGED` provenance를 독립 보존한다. OCR 성공 후 Text Quality를
+다시 평가하고 더 나은 경우에만 parser 입력으로 채택한다. 핵심 보험 용어가 크게
+충돌하면 두 원문을 보존하고 `TEXT_OCR_CONFLICT`를 생성한다. 낮은 OCR confidence의
+parser 결과는 HIGH가 될 수 없다.
+
+## 14. Provider와 adapter
+
+Provider는 파일명이 아닌 전체 effective text의 회사명·제목·layout 신호를 score화해
+`MERITZ`, `SAMSUNG`, `LOTTE`, `GENERIC`, `UNKNOWN`으로 판정한다. Provider adapter는
+Generic Parser 이전에 page type, 연속 product-detail context, OCR 필요 hint만 제공한다.
+메리츠 반복 Aggregate는 기존 dedup 정책으로 출처만 병합하고, 삼성 연속 상세는 새
+보험사/상품 header가 없는 바로 다음 페이지에서만 계약 context를 상속한다. 롯데
+adapter는 깨진 Text Layer에서 값을 복원하지 않고 OCR 필요 상태만 명시한다.
+
+## 15. 좌표 행 복원과 중복 정책
+
+Row reconstruction은 word 높이 중앙값과 페이지 높이로 y tolerance를 계산해 미세하게
+어긋난 word를 같은 시각 행으로 묶고 좌→우 정렬한다. 행 bbox와 column 후보를 debug
+JSON에 기록하며 Aggregate와 계약표 parser가 header-cell bbox 관계를 우선 사용한다.
+
+계약 identity는 확인된 보험사, 상품명, 가입일, 보험기간, 피보험자로 구성한다. Rider
+중복 키는 계약 identity, 정규화 담보명, 질병/상해, 지급단위, 가입금액이므로 지급조건이
+다른 담보는 합치지 않는다. 완전히 동일한 반복 Rider는 금액을 합산하지 않고 source만
+병합하며 금액 충돌은 `RIDER_DUPLICATE_CONFLICT`로 남긴다.
+
+## 16. 지원 수준 및 실행 제어
+
+분석 결과는 provider confidence, Text Layer 페이지 수, OCR 시도/성공/실패 수,
+계약·Aggregate·Rider 수, 검토 항목 수와 `FULL`, `PARTIAL`, `REVIEW_REQUIRED`,
+`UNSUPPORTED` 지원 수준을 제공한다. `on_progress(current, total, stage)`와
+`is_cancelled()` dependency injection으로 향후 GUI 진행률·취소 기능을 연결할 수 있다.
+
+설정 JSON은 `dental_coverage_analyzer.resources.config` package data에 포함하고
+`importlib.resources`로 읽는다. PyInstaller에서는 `_MEIPASS`, 개발 checkout에서는
+루트 `config/`를 호환 fallback으로 사용하므로 설정 위치 때문에 parser 구조를 다시
+변경하지 않는다.

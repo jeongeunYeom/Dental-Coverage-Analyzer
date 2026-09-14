@@ -12,11 +12,22 @@ class OCRStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class OCRWord:
+    text: str
+    bbox: tuple[float, float, float, float]
+    confidence: float
+    block_no: int = 0
+    line_no: int = 0
+    word_no: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class OCRResult:
     status: OCRStatus
     text: str | None = None
     confidence: float | None = None
     reason: str | None = None
+    words: tuple[OCRWord, ...] = ()
 
 
 class OCREngine(Protocol):
@@ -31,4 +42,3 @@ class NotConfiguredOCREngine:
     def recognize(self, image: bytes, languages: tuple[str, ...] = ("kor", "eng")) -> OCRResult:
         del image, languages
         return OCRResult(OCRStatus.NOT_CONFIGURED, reason="로컬 OCR 엔진이 설정되지 않았습니다")
-

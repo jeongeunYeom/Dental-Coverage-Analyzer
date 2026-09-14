@@ -4,6 +4,7 @@ from .coverage import AggregateCoverage, DentalRider
 from .customer import CustomerInfo
 from .pdf_page import (
     ExtractionCandidate,
+    EffectiveTextSource,
     PDFBlock,
     PDFDocumentData,
     PDFPageData,
@@ -14,7 +15,8 @@ from .validation import ValidationIssue, ValidationSeverity
 
 __all__ = [
     "AggregateCoverage", "CauseType", "Confidence", "CustomerInfo", "DentalRider",
-    "ExtractionCandidate", "InsuranceContract", "PDFBlock", "PDFDocumentData",
-    "PDFPageData", "PDFWord", "PageType", "PaymentUnit", "SourceReference",
+    "EffectiveTextSource", "ExtractionCandidate", "InsuranceContract", "PDFBlock", "PDFDocumentData",
+    "PDFPageData", "PDFWord", "PageType", "ParserSupportSummary", "PaymentUnit", "SourceReference", "SupportLevel",
     "ValidationIssue", "ValidationSeverity",
 ]
+from .analysis import ParserSupportSummary, SupportLevel

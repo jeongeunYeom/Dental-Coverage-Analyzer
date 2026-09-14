@@ -50,3 +50,5 @@ class DentalRider:
     confidence: Confidence = Confidence.LOW
     confidence_reason: str = "자동 추출 결과를 검토해야 함"
     raw_text: str | None = None
+    sources: list[SourceReference] = field(default_factory=list)
+    contract_identity: str | None = None

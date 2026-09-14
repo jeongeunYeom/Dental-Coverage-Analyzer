@@ -11,10 +11,11 @@ from dental_coverage_analyzer.core.dental import (
     extract_payment_unit,
 )
 from dental_coverage_analyzer.core.money import parse_money
-from dental_coverage_analyzer.core.resources import config_path
+from dental_coverage_analyzer.core.resources import load_config
 from dental_coverage_analyzer.models import (
     Confidence,
     DentalRider,
+    EffectiveTextSource,
     InsuranceContract,
     PDFDocumentData,
     PageType,
@@ -34,7 +35,7 @@ _AMOUNT_RE = re.compile(
 
 def _line_bbox(page, line: str) -> tuple[float, float, float, float] | None:
     tokens = {token.casefold() for token in line.split() if token}
-    matches = [word for word in page.words if word.text.casefold() in tokens]
+    matches = [word for word in (page.effective_words or page.words) if word.text.casefold() in tokens]
     if not matches:
         return None
     return (
@@ -45,9 +46,11 @@ def _line_bbox(page, line: str) -> tuple[float, float, float, float] | None:
 
 class DentalRiderParser:
     def __init__(self, keywords_file: str | Path | None = None) -> None:
-        path = Path(keywords_file) if keywords_file else config_path("dental_keywords.json")
-        with path.open(encoding="utf-8") as stream:
-            config = json.load(stream)
+        if keywords_file:
+            with Path(keywords_file).open(encoding="utf-8") as stream:
+                config = json.load(stream)
+        else:
+            config = load_config("dental_keywords.json")
         self.keywords: list[str] = sorted(config["include"], key=len, reverse=True)
         self.exclusions: list[str] = config["exclude"]
         self.category_classifier = DentalCategoryClassifier()
@@ -67,18 +70,23 @@ class DentalRiderParser:
         for page in document.pages:
             if page.page_type not in _PAGE_TYPES:
                 continue
+            text = page.effective_text or page.text
             page_contracts = contracts_by_page.get(page.page_number, [])
             # 동일 페이지에 여러 계약이 있고 표 영역 연결이 없으면 하나를 임의 선택하지 않는다.
             contract = page_contracts[0] if len(page_contracts) == 1 else None
             inherited = False
-            if contract is None and previous_contract is not None and page.page_number == previous_page + 1:
+            no_new_header = "보험회사" not in text and "상품명" not in text
+            if (
+                contract is None and previous_contract is not None
+                and page.page_number == previous_page + 1 and no_new_header
+            ):
                 if self.product_detector.detect(previous_contract.product_name).is_candidate:
                     contract = previous_contract
                     inherited = True
             if contract is not None:
                 previous_contract, previous_page = contract, page.page_number
 
-            for line in (line.strip() for line in page.text.splitlines() if line.strip()):
+            for line in (line.strip() for line in text.splitlines() if line.strip()):
                 if any(exclusion in line for exclusion in self.exclusions):
                     continue
                 amounts = list(_AMOUNT_RE.finditer(line))
@@ -110,9 +118,14 @@ class DentalRiderParser:
                 elif inherited:
                     confidence = Confidence.MEDIUM
                     reason = "직전 연속 상품 상세 페이지의 검증된 치아보험 context"
-                if page.ocr_required:
+                if page.effective_source is EffectiveTextSource.OCR:
+                    confidence = Confidence.MEDIUM if page.confidence is not Confidence.LOW else Confidence.LOW
+                    reason = "OCR 기반 담보명과 금액"
+                elif page.ocr_required:
                     confidence = Confidence.LOW
                     reason = "OCR 필요 페이지의 Text Layer에서 추출"
+                source = SourceReference(page.page_number, _line_bbox(page, line), line)
+                contract_identity = _contract_identity(contract) if contract else None
                 rider = DentalRider(
                     raw_name=raw_name,
                     insurer=contract.insurer if contract else None,
@@ -124,10 +137,12 @@ class DentalRiderParser:
                     raw_amount=parsed.raw,
                     payment_unit=extract_payment_unit(line),
                     cause_type=extract_cause_type(raw_name),
-                    source=SourceReference(page.page_number, _line_bbox(page, line), line),
+                    source=source,
                     confidence=confidence,
                     confidence_reason=reason,
                     raw_text=line,
+                    sources=[source],
+                    contract_identity=contract_identity,
                 )
                 riders.append(rider)
                 if confidence is Confidence.LOW:
@@ -136,4 +151,48 @@ class DentalRiderParser:
                         f"낮은 confidence 담보 '{raw_name}'를 확인해야 합니다",
                         [page.page_number], "DentalRider", raw_name, [line],
                     ))
-        return ParserOutput(riders, issues)
+        deduplicated, duplicate_issues = deduplicate_dental_riders(riders)
+        return ParserOutput(deduplicated, issues + duplicate_issues)
+
+
+def _contract_identity(contract: InsuranceContract) -> str:
+    parts = (
+        contract.insurer, contract.product_name,
+        contract.enrollment_date.isoformat() if contract.enrollment_date else None,
+        contract.coverage_period, contract.insured_person,
+    )
+    values = [value for value in parts if value]
+    if not any((contract.enrollment_date, contract.coverage_period, contract.insured_person)):
+        values.append("pages=" + ",".join(str(source.page) for source in contract.sources))
+    return "|".join(values)
+
+
+def deduplicate_dental_riders(
+    riders: list[DentalRider],
+) -> tuple[list[DentalRider], list[ValidationIssue]]:
+    merged: dict[tuple, DentalRider] = {}
+    amount_sets: dict[tuple, set[int | None]] = {}
+    issues: list[ValidationIssue] = []
+    for rider in riders:
+        base = (
+            rider.contract_identity, rider.normalized_name, rider.cause_type, rider.payment_unit,
+        )
+        amount_sets.setdefault(base, set()).add(rider.enrolled_amount)
+        key = (*base, rider.enrolled_amount)
+        if key not in merged:
+            merged[key] = rider
+            continue
+        current = merged[key]
+        for source in rider.sources or ([rider.source] if rider.source else []):
+            if source and source not in current.sources:
+                current.sources.append(source)
+    for base, amounts in amount_sets.items():
+        if len(amounts) > 1:
+            related = [rider for key, rider in merged.items() if key[:4] == base]
+            issues.append(ValidationIssue(
+                "RIDER_DUPLICATE_CONFLICT", ValidationSeverity.WARNING,
+                "동일 계약·담보·원인·지급단위에서 서로 다른 가입금액이 발견되었습니다",
+                sorted({source.page for rider in related for source in rider.sources}),
+                "DentalRider", str(base[1]), [str(amount) for amount in sorted(amounts, key=str)],
+            ))
+    return list(merged.values()), issues
