@@ -18,4 +18,8 @@ python -m dental_coverage_analyzer analyze sample.pdf --json analysis_debug.json
 OCR 필요 여부는 판정하지만 현재 OCR adapter는 `NOT_CONFIGURED`를 안전하게
 반환합니다. 원본 PDF와 debug JSON은 외부로 전송되지 않습니다.
 
+구조화된 페이지는 Generic Parsing Engine을 거쳐 보험계약, 전체 치아보장 집계,
+상품별 치아담보와 확인 필요 항목으로 변환됩니다. Parser는 명시적인 label,
+table header 및 bbox 관계가 있는 값만 확정하고, 반복 집계금액을 합산하지 않습니다.
+
 개발 원칙과 후속 단계는 [`docs/architecture.md`](docs/architecture.md)를 참고하세요.

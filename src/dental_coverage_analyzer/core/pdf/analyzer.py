@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 import json
 from pathlib import Path
 from typing import Any
 
-from dental_coverage_analyzer.models import Confidence, ExtractionCandidate, PDFDocumentData
+from dental_coverage_analyzer.models import (
+    AggregateCoverage,
+    Confidence,
+    DentalRider,
+    ExtractionCandidate,
+    InsuranceContract,
+    PDFDocumentData,
+    ValidationIssue,
+)
 
 from .layout_extractor import extract_page_layout
 from .page_classifier import PageClassifier
@@ -25,6 +33,11 @@ class PDFAnalysisResult:
     dental_candidate_pages: list[int]
     insurer_candidates: list[ExtractionCandidate]
     product_candidates: list[ExtractionCandidate]
+    contracts: list[InsuranceContract] = field(default_factory=list)
+    aggregate_coverages: list[AggregateCoverage] = field(default_factory=list)
+    dental_riders: list[DentalRider] = field(default_factory=list)
+    validation_issues: list[ValidationIssue] = field(default_factory=list)
+    dental_product_count: int = 0
 
     @property
     def total_pages(self) -> int:
@@ -43,6 +56,11 @@ class PDFAnalysisResult:
             "dental_candidate_pages": self.dental_candidate_pages,
             "insurer_candidates": self.insurer_candidates,
             "product_candidates": self.product_candidates,
+            "contracts": self.contracts,
+            "aggregate_coverages": self.aggregate_coverages,
+            "dental_riders": self.dental_riders,
+            "validation_issues": self.validation_issues,
+            "dental_product_count": self.dental_product_count,
             "pages": self.document.pages,
         })
 
@@ -139,6 +157,11 @@ def analyze_pdf(
     products = _deduplicate_candidates([
         candidate for page in document_data.pages for candidate in page.product_candidates
     ])
+    # 지연 import로 PDF foundation과 parser의 모듈 의존 방향을 단순하게 유지한다.
+    from dental_coverage_analyzer.core.parsers import GenericParser
+
+    parser = GenericParser()
+    parsed = parser.parse(document_data)
     return PDFAnalysisResult(
         document=document_data,
         text_quality_summary=dict(quality_counts),
@@ -149,4 +172,9 @@ def analyze_pdf(
         ],
         insurer_candidates=insurers,
         product_candidates=products,
+        contracts=parsed.contracts,
+        aggregate_coverages=parsed.aggregate_coverages,
+        dental_riders=parsed.dental_riders,
+        validation_issues=parsed.validation_issues,
+        dental_product_count=parser.dental_contract_count(parsed.contracts),
     )

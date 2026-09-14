@@ -10,9 +10,11 @@ from .pdf_page import (
     PDFWord,
     PageType,
 )
+from .validation import ValidationIssue, ValidationSeverity
 
 __all__ = [
     "AggregateCoverage", "CauseType", "Confidence", "CustomerInfo", "DentalRider",
     "ExtractionCandidate", "InsuranceContract", "PDFBlock", "PDFDocumentData",
     "PDFPageData", "PDFWord", "PageType", "PaymentUnit", "SourceReference",
+    "ValidationIssue", "ValidationSeverity",
 ]

@@ -89,3 +89,18 @@ OCR은 이번 단계에서 adapter protocol과 명시적인 `NOT_CONFIGURED` 구
 OCR 필요 페이지를 숨기거나 Text Layer를 정상으로 가장하지 않으며, 다음 단계에서
 로컬 OCR 구현을 이 interface에 연결한다. 이후 Aggregate/Contract/Rider parser는
 페이지 원문과 좌표 및 후보 confidence를 그대로 입력으로 사용한다.
+
+## 12. Generic Parsing Engine
+
+`GenericParser`는 계약을 먼저 추출하고 그 결과를 Rider parser에 명시적으로 전달한다.
+Aggregate parser는 필드 label을 우선하며, label이 없을 때에는 table header와 동일 행
+bbox 열 관계 또는 명시적인 표 단위가 있는 경우만 값을 대응한다. 권장/가입금액에서
+계산한 부족·초과·보장률과 PDF 원문 값을 별도로 보존하며 충돌은 수정하지 않고
+`ValidationIssue`로 기록한다.
+
+동일 이름과 동일 권장/가입금액의 Aggregate 반복은 금액을 합산하지 않고 출처 페이지만
+병합한다. 값이 다른 후보는 모두 유지하고 `AGGREGATE_AMOUNT_CONFLICT`를 만든다.
+Rider는 보험사 원본 담보명으로 치아 여부와 category를 판단하며 신용정보원 이름은 별도
+필드로 보존한다. 질병/상해 및 지급단위도 별도 필드이므로 서로 다른 담보를 합치지 않는다.
+동일 페이지에 계약이 여러 개이거나 OCR이 필요한 등 연결 근거가 부족한 경우 보험사와
+상품명을 추측하지 않고 LOW confidence 및 확인 필요 항목으로 남긴다.

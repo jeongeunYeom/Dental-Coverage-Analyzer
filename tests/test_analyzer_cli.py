@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import dental_coverage_analyzer.__main__ as cli
 from dental_coverage_analyzer.__main__ import main
 from dental_coverage_analyzer.core.pdf.analyzer import PDFAnalysisResult, analyze_pdf
 from dental_coverage_analyzer.models import PDFDocumentData, PDFPageData
@@ -18,6 +19,23 @@ def test_json_export_schema_without_pdf_dependency(tmp_path: Path):
     assert payload["file"] == "synthetic.pdf"
     assert payload["total_pages"] == 1
     assert payload["pages"][0]["text_quality"] == "TEXT_PARTIAL"
+    assert payload["contracts"] == []
+    assert payload["aggregate_coverages"] == []
+    assert payload["dental_riders"] == []
+    assert payload["validation_issues"] == []
+
+
+def test_cli_reports_parser_counts_without_pdf_dependency(tmp_path: Path, monkeypatch, capsys):
+    document = PDFDocumentData(tmp_path / "synthetic.pdf", "synthetic.pdf", 0, {}, False, [])
+    result = PDFAnalysisResult(document, {}, [], {}, [], [], [], dental_product_count=2)
+    monkeypatch.setattr(cli, "analyze_pdf", lambda *_args, **_kwargs: result)
+    assert main(["analyze", str(tmp_path / "synthetic.pdf")]) == 0
+    output = capsys.readouterr().out
+    assert "발견된 보험계약 수: 0" in output
+    assert "치아보험 상품 수: 2" in output
+    assert "전체 치아보장 수: 0" in output
+    assert "세부 치아담보 수: 0" in output
+    assert "확인 필요 항목 수: 0" in output
 
 
 def test_analyzer_structures_all_pages_and_exports_json(synthetic_pdf: Path, tmp_path: Path):

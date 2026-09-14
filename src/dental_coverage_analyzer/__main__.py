@@ -38,6 +38,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ))
     print("보험사 후보: " + (", ".join(c.value for c in result.insurer_candidates) or "없음"))
     print("상품명 후보: " + (", ".join(c.value for c in result.product_candidates) or "없음"))
+    print(f"발견된 보험계약 수: {len(result.contracts)}")
+    print(f"치아보험 상품 수: {result.dental_product_count}")
+    print(f"전체 치아보장 수: {len(result.aggregate_coverages)}")
+    print(f"세부 치아담보 수: {len(result.dental_riders)}")
+    print(f"확인 필요 항목 수: {len(result.validation_issues)}")
     if args.json_path:
         print(f"JSON 저장: {result.export_json(args.json_path)}")
     return 0

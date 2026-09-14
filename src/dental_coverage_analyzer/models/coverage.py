@@ -18,6 +18,7 @@ class AggregateCoverage:
     reported_ratio: float | None = None
     calculated_ratio: float | None = None
     status: str | None = None
+    normalized_status: str = "UNKNOWN"
     source_pages: list[int] = field(default_factory=list)
     representative_source: SourceReference | None = None
     confidence: Confidence = Confidence.LOW
