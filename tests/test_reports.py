@@ -38,9 +38,11 @@ def test_report_data_is_decoupled_and_preserves_no_guess_values():
     assert data.aggregates[0].ratio == 25.0
     assert data.riders[0].amount == 90_000
     assert data.contracts[0].monthly_premium == 17_610
-    missing = build_report_data(CustomerInfo(), [], [InsuranceContract()], [])
+    missing_contract = InsuranceContract()
+    missing = build_report_data(CustomerInfo(), [], [missing_contract], [])
     assert missing.customer_name == "정보 없음"
-    assert missing.contracts[0].insurer is None
+    assert missing.contracts == ()
+    assert missing_contract.product_name is None  # 원본 계약은 변경하지 않는다.
 
 
 def test_manual_edits_are_reflected_when_report_data_is_rebuilt():
@@ -69,7 +71,10 @@ def test_html_report_contains_cards_colors_disclaimer_and_no_rider_total():
 def test_pdf_export_smoke(tmp_path: Path, monkeypatch):
     pytest.importorskip("PySide6", reason="PySide6가 필요한 PDF 출력 smoke test")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
     app = QApplication.instance() or QApplication([])
     output = export_report_pdf(build_report_data(*sample_data()), tmp_path / "report.pdf")
     assert output.read_bytes().startswith(b"%PDF")
@@ -109,6 +114,21 @@ def test_invalid_zero_recommendation_is_not_calculated_in_report():
     assert data.aggregates[0].status == "정보 확인 필요"
 
 
+def test_samsung_report_status_uses_shared_amount_normalization():
+    prosthetic = aggregate("치아보철 치료비", recommended=2_000_000, enrolled=0, status=None)
+    restorative = aggregate(
+        "치아보존 치료비", category="보존치료", recommended=200_000,
+        enrolled=370_000, status="미가입",
+    )
+    data = build_report_data(CustomerInfo(), [prosthetic, restorative], [], [])
+    assert (data.aggregates[0].status, data.aggregates[0].shortage_amount, data.aggregates[0].ratio) == (
+        "미가입", 2_000_000, 0.0,
+    )
+    assert (data.aggregates[1].status, data.aggregates[1].shortage_amount, data.aggregates[1].ratio) == (
+        "충분", 0, 185.0,
+    )
+
+
 def test_conflict_warning_is_added_without_removing_validation_issue():
     first = aggregate("치아보철치료비", enrolled=500_000, page=2)
     second = aggregate("치아보철치료비", enrolled=700_000, page=7)
@@ -117,6 +137,36 @@ def test_conflict_warning_is_added_without_removing_validation_issue():
     assert len(data.aggregates) == 1
     assert data.aggregate_warnings
     assert data.validation_issues == (issue,)
+    html = render_report_html(data)
+    assert "원본 자료에서 일부 보장항목의 값이 서로 다르게 확인되어" in html
+    for debug_text in ("page 2", "page 7", "가입=None", "후보:", "confidence="):
+        assert debug_text not in html
+
+
+def test_report_contains_only_explicit_dental_product_contracts():
+    contracts = [
+        InsuranceContract(insurer="삼성화재", product_name="가정종합보험"),
+        InsuranceContract(insurer="메리츠화재", product_name="암보험"),
+        InsuranceContract(insurer="KDB생명", product_name="연금보험"),
+        InsuranceContract(insurer="라이나(에이스)손해보험", product_name="(무)더핏 THE든든한 치아보험 1종(갱신형)"),
+    ]
+    original = list(contracts)
+    data = build_report_data(CustomerInfo(), [], contracts, [])
+    assert len(data.contracts) == 1
+    assert data.contracts[0].insurer == "라이나(에이스)손해보험"
+    assert data.contracts[0].product_name == "(무)더핏 THE든든한 치아보험 1종(갱신형)"
+    assert contracts == original and len(contracts) == 4
+    assert [page.kind for page in plan_report_pages(data)] == ["summary"]
+
+
+def test_non_low_linked_dental_rider_can_include_contract_without_name_keyword():
+    contract = InsuranceContract(
+        insurer="가상손해보험", product_name="튼튼건강보장",
+        coverage_period="2025-01-01 ~ 2035-01-01",
+    )
+    identity = "가상손해보험|튼튼건강보장|2025-01-01 ~ 2035-01-01"
+    rider = DentalRider("컴퍼짓레진", contract_identity=identity, confidence=Confidence.MEDIUM)
+    assert len(build_report_data(CustomerInfo(), [], [contract], [rider]).contracts) == 1
 
 
 def test_dynamic_page_plan_omits_empty_contract_and_rider_pages():
@@ -141,7 +191,10 @@ def test_aggregate_only_qpdfwriter_output_is_one_page(tmp_path: Path, monkeypatc
     pytest.importorskip("PySide6", reason="PySide6가 필요한 QPdfWriter smoke test")
     fitz = pytest.importorskip("fitz", reason="PDF page count 확인에 PyMuPDF 필요")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
     app = QApplication.instance() or QApplication([])
     data = build_report_data(CustomerInfo(name="가명"), [aggregate("치아보철치료비")], [], [])
     output = export_report_pdf(data, tmp_path / "aggregate-only.pdf")

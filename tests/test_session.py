@@ -44,4 +44,4 @@ def test_session_exposes_only_canonical_aggregates_and_preserves_raw_candidates(
     assert [(item.recommended_amount, item.enrolled_amount) for item in report.aggregates] == [
         (2_000_000, 500_000), (500_000, 0),
     ]
-    assert len(report.aggregate_warnings) == 2
+    assert len(report.aggregate_warnings) == 1

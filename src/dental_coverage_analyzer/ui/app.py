@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult, analyze_pdf
+from dental_coverage_analyzer.core.processing import normalize_aggregate_values
 from dental_coverage_analyzer.models import Confidence
 from dental_coverage_analyzer.reports import build_report_data, export_report_pdf, format_money, render_report_html
 from dental_coverage_analyzer.reports.theme import CATEGORY_COLORS, DEFAULT_COLOR
@@ -186,11 +187,12 @@ class MainWindow(QMainWindow):
         widget = QWidget(); layout = QVBoxLayout(widget)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); cards = QWidget(); cards_layout = QVBoxLayout(cards)
         for item in self.session.aggregates:
+            normalized = normalize_aggregate_values(item)
             card = QFrame(); card.setObjectName("card"); row = QHBoxLayout(card)
             color = CATEGORY_COLORS.get(item.category or "", DEFAULT_COLOR)
             name = QLabel(item.raw_name); name.setStyleSheet(f"font-size:18px;font-weight:700;color:{color}")
             row.addWidget(name, 2)
-            for label, value in (("가입금액", format_money(item.enrolled_amount)), ("권장금액", format_money(item.recommended_amount)), ("보장률", f"{item.calculate_ratio():.0f}%" if item.calculate_ratio() is not None else "정보 없음"), ("상태", item.status or "확인 필요")):
+            for label, value in (("가입금액", format_money(item.enrolled_amount)), ("권장금액", format_money(item.recommended_amount)), ("보장률", f"{normalized.ratio:.0f}%" if normalized.ratio is not None else "정보 없음"), ("상태", normalized.status)):
                 box = QLabel(f"<span style='color:#7B8297'>{label}</span><br><b>{value}</b>"); row.addWidget(box, 1)
             cards_layout.addWidget(card)
         cards_layout.addStretch(); scroll.setWidget(cards); layout.addWidget(scroll, 1)
@@ -263,8 +265,9 @@ class MainWindow(QMainWindow):
     def _fill_aggregates(self):
         self.aggregate_table.setRowCount(0)
         for row, item in enumerate(self.session.aggregates):
+            normalized = normalize_aggregate_values(item)
             confidence = {"HIGH":"높음","MEDIUM":"보통","LOW":"낮음"}.get(item.confidence.value, "확인 필요")
-            self.aggregate_table.insertRow(row); self._set_row(self.aggregate_table, row, [item.raw_name, item.category, item.recommended_amount, item.enrolled_amount, item.normalized_shortage if item.normalized_shortage is not None else item.shortage_amount, item.status, ", ".join(map(str, item.source_pages)), confidence])
+            self.aggregate_table.insertRow(row); self._set_row(self.aggregate_table, row, [item.raw_name, item.category, item.recommended_amount, item.enrolled_amount, normalized.shortage, normalized.status, ", ".join(map(str, item.source_pages)), confidence])
             raw = item.representative_source.raw_text if item.representative_source else ""
             for col in range(self.aggregate_table.columnCount()): self.aggregate_table.item(row, col).setToolTip(raw or "")
 

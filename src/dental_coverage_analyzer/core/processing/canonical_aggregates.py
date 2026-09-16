@@ -5,6 +5,8 @@ from enum import IntEnum
 
 from dental_coverage_analyzer.models import AggregateCoverage, Confidence
 
+from .aggregate_normalization import normalize_aggregate_values
+
 
 class AggregateValidity(IntEnum):
     INVALID = 0
@@ -44,7 +46,8 @@ def assess_aggregate(item: AggregateCoverage) -> AggregateAssessment:
     recommended = item.recommended_amount
     enrolled = item.enrolled_amount
     shortage = _difference(item)
-    status = (item.status or "").strip()
+    normalized = normalize_aggregate_values(item)
+    status = normalized.status
     complete = recommended is not None and enrolled is not None
     consistent = False
     reason = "필수 금액이 일부 확인되지 않음"
@@ -53,21 +56,22 @@ def assess_aggregate(item: AggregateCoverage) -> AggregateAssessment:
         validity = AggregateValidity.INVALID
         reason = "권장금액이 0 이하임"
     elif status == "부족":
-        if not complete or shortage is None:
+        if not complete:
             validity = AggregateValidity.INCOMPLETE
-            reason = "부족 상태의 권장/가입/부족금액이 모두 확인되지 않음"
+            reason = "부족 상태의 권장/가입금액이 모두 확인되지 않음"
         else:
-            consistent = recommended > enrolled and recommended - enrolled == shortage
-            validity = AggregateValidity.VALID if consistent else AggregateValidity.INVALID
-            reason = "부족 상태와 금액이 일치함" if consistent else "부족 상태와 금액 계산이 일치하지 않음"
+            expected = recommended - enrolled
+            consistent = shortage is None or shortage == expected
+            validity = AggregateValidity.VALID
+            reason = "부족 상태와 정규화 금액이 일치함"
     elif status == "미가입":
-        if not complete or shortage is None:
+        if not complete:
             validity = AggregateValidity.INCOMPLETE
-            reason = "미가입 상태의 권장/가입/부족금액이 모두 확인되지 않음"
+            reason = "미가입 상태의 권장/가입금액이 모두 확인되지 않음"
         else:
-            consistent = recommended > 0 and enrolled == 0 and shortage == recommended
-            validity = AggregateValidity.VALID if consistent else AggregateValidity.INVALID
-            reason = "미가입 상태와 금액이 일치함" if consistent else "미가입 상태와 금액 계산이 일치하지 않음"
+            consistent = shortage is None or shortage == recommended
+            validity = AggregateValidity.VALID
+            reason = "미가입 상태와 정규화 금액이 일치함"
     elif status in {"충분", "적정"}:
         if not complete:
             validity = AggregateValidity.INCOMPLETE

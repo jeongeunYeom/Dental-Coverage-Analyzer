@@ -173,6 +173,14 @@ ValidationIssue를 보존한다. 권장금액이 0이거나 불명확하면 보�
 계약 또는 Rider가 없으면 빈 페이지를 만들지 않으며 소량 계약은 첫 페이지 하단에
 배치한다. Rider 금액은 어떤 경우에도 합산하지 않는다.
 
+고객 표시용 Aggregate 상태·부족금액·보장률은 공통 `normalize_aggregate_values`에서
+확인된 권장/가입금액으로 계산한다. 원문 상태와 원문 차액 필드는 덮어쓰지 않으며 충돌은
+ValidationIssue로 유지한다. ReportData의 계약은 원본 계약 목록을 변경하지 않고
+`DentalProductDetector`의 명시적 치아보험 상품 후보만 포함한다. 예외적으로 LOW가 아닌
+DentalRider가 동일 contract identity로 연결된 계약만 포함할 수 있다. 고객용 보고서의
+Aggregate 충돌 경고는 하나의 간단한 안내로 합치고 page·raw 값 등 상세 근거는 GUI의
+확인 필요 탭과 debug JSON에만 남긴다.
+
 Windows 배포는 PyInstaller onedir spec을 기본으로 한다. package config/report resource와
 PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Python 3.11 테스트,
 빌드, ZIP 생성 후 `DentalCoverageAnalyzer-Windows` artifact를 업로드한다. Tesseract가
