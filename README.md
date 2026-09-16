@@ -42,7 +42,7 @@ Text Layer가 깨졌거나 이미지뿐인 페이지만 Tesseract 로컬 OCR을 
 * 전체 치아보장, 보험계약, 상품별 치아담보 추출
 * Text Layer와 OCR provenance 및 confidence 확인
 * 결과 수동 수정, Aggregate/Rider 추가·삭제
-* HTML 미리보기 및 PySide6/QPrinter A4 PDF 저장
+* HTML 미리보기 및 PySide6 QPdfWriter/QPainter 기반 A4 PDF 저장
 * Local debug JSON 저장
 
 고급 bbox 하이라이트 PDF Viewer, 여러 PDF 일괄 처리, 자동 업데이트 및 보험 추천 기능은 아직 제공하지 않습니다.
@@ -71,3 +71,18 @@ python -m dental_coverage_analyzer analyze sample.pdf --json analysis_debug.json
 
 Windows에서 직접 빌드하려면 `build_exe.bat`를 실행합니다. 결과는
 `dist\DentalCoverageAnalyzer\DentalCoverageAnalyzer.exe`에 생성됩니다.
+
+## 보고서 디자인 확인
+
+최종 PDF는 HTML 인쇄가 아니라 Qt의 벡터 드로잉으로 생성합니다. 동일 카테고리의
+Aggregate가 충돌하면 원본과 ValidationIssue는 유지하되, 보고서에는 confidence·완전성·
+논리 일관성·출처 근거 순으로 고른 대표 카드 하나만 표시합니다. 계약이나 세부 담보가
+없으면 빈 전용 페이지를 만들지 않습니다.
+
+개인정보가 없는 가상 데이터로 디자인을 확인하려면 다음 명령을 실행합니다.
+
+```bash
+python scripts/generate_sample_report.py
+```
+
+저장소 루트에 `sample_report.pdf`가 생성됩니다.

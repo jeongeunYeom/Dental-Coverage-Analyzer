@@ -159,9 +159,17 @@ PySide6 UI는 parser 결과를 직접 변경하지 않고 `AnalysisSession`에 d
 MVP에서는 bbox highlight viewer를 포함하지 않는다.
 
 보고서는 parser model과 분리된 immutable `ReportData` view model에서 생성한다.
-HTML/CSS template은 package resource로 포함하며 미리보기는 `QTextBrowser`, PDF 저장은
-외부 실행파일이 필요 없는 `QTextDocument`와 `QPrinter`를 사용한다. 권장금액이 없으면
-보장률/progress를 생성하지 않고 Rider 금액은 어떤 경우에도 합산하지 않는다.
+HTML/CSS template은 package resource로 포함해 `QTextBrowser` 미리보기에 사용한다.
+최종 PDF는 브라우저 CSS 의존성을 피하기 위해 `QPdfWriter`와 `QPainter`로 A4 벡터
+페이지를 직접 그린다. 두 출력은 동일한 ReportData, 색상, 카드 계층과 조건부 section을
+사용한다.
+
+ReportData는 parser 원본을 변경하지 않고 같은 보철/보존 카테고리 후보 중 보고서 대표값
+하나를 선택한다. 우선순위는 confidence, 권장·가입금액 완전성, 상태·차액의 논리 일관성,
+출처 근거, 이른 source page 순이다. 값이 충돌하면 대표 카드만 표시하되 경고와 기존
+ValidationIssue를 보존한다. 권장금액이 0이거나 불명확하면 보장률을 계산하지 않는다.
+계약 또는 Rider가 없으면 빈 페이지를 만들지 않으며 소량 계약은 첫 페이지 하단에
+배치한다. Rider 금액은 어떤 경우에도 합산하지 않는다.
 
 Windows 배포는 PyInstaller onedir spec을 기본으로 한다. package config/report resource와
 PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Python 3.11 테스트,

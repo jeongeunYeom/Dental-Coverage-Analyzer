@@ -296,7 +296,11 @@ class MainWindow(QMainWindow):
 
     def report_data(self):
         if not self._sync_tables(): return None
-        return build_report_data(self.session.customer, self.session.aggregates, self.session.contracts, self.session.riders)
+        return build_report_data(
+            self.session.customer, self.session.aggregates, self.session.contracts,
+            self.session.riders,
+            self.session.result.validation_issues if self.session.result else [],
+        )
 
     def preview_report(self):
         data = self.report_data()
