@@ -1,0 +1,26 @@
+@page { size:A4 portrait; margin:18mm; }
+body { font-family:"Malgun Gothic","맑은 고딕",sans-serif; color:#252A3D; background:#F7F8FC; font-size:10pt; line-height:1.45; }
+.page { padding:7mm; background:#F7F8FC; }
+.hero { background:#EFEEFF; border-radius:18px; padding:10mm; margin-bottom:9mm; }
+.eyebrow { color:#625EF5; font-size:9pt; font-weight:700; letter-spacing:1px; }
+h1 { font-size:25pt; margin:2mm 0 5mm; } h2 { font-size:17pt; margin:7mm 0 4mm; }
+.meta,.secondary { color:#858CA0; }
+.grid { width:100%; border-collapse:separate; border-spacing:4mm; }
+.summary-card,.contract-card,.rider-row { background:#FFF; border-radius:15px; padding:6mm; }
+.summary-card { width:50%; vertical-align:top; }
+.badge { color:#FFF; border-radius:10px; padding:1mm 3mm; font-size:8.5pt; font-weight:700; }
+.coverage-name { font-size:13pt; font-weight:700; margin:4mm 0; }
+.main-amount { font-size:18pt; font-weight:800; margin-top:4mm; }
+.amount-label { color:#858CA0; font-size:9pt; }
+.sub-amount { margin-top:3mm; color:#596075; }
+.ratio { font-size:15pt; font-weight:800; margin-top:4mm; }
+.progress { height:6px; background:#E8EAF2; border-radius:3px; margin:2mm 0; }
+.progress-fill { height:6px; border-radius:3px; }
+.warning { background:#FFF7E8; color:#8B641F; border-radius:12px; padding:4mm; margin:4mm 0; font-size:9pt; }
+.contract-card { margin:3mm 0; border-left:4px solid #625EF5; }
+.product-name { font-size:14pt; font-weight:700; margin:2mm 0; }
+.category-title { color:#FFF; border-radius:10px; padding:3mm 4mm; font-size:12pt; font-weight:700; margin-top:5mm; }
+.rider-row { margin:2mm 0; width:100%; }
+.rider-name { font-size:11.5pt; font-weight:700; } .rider-amount { text-align:right; font-size:14pt; font-weight:700; }
+.disclaimer { background:#EEF0F5; color:#757C90; border-radius:10px; padding:4mm; margin-top:9mm; font-size:8.5pt; }
+.page-break { page-break-before:always; }
