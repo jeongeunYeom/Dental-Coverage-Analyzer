@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult
+from dental_coverage_analyzer.core.processing import select_canonical_aggregates
 from dental_coverage_analyzer.models import (
     AggregateCoverage, CauseType, Confidence, CustomerInfo, DentalRider,
     InsuranceContract, PaymentUnit,
@@ -19,17 +20,28 @@ class AnalysisSession:
     aggregates: list[AggregateCoverage] = field(default_factory=list)
     riders: list[DentalRider] = field(default_factory=list)
     result: PDFAnalysisResult | None = None
+    raw_aggregate_candidates: list[AggregateCoverage] = field(default_factory=list)
+    aggregate_conflict_warnings: list[str] = field(default_factory=list)
 
     @classmethod
     def from_result(cls, source_path: str, result: PDFAnalysisResult) -> "AnalysisSession":
+        raw_candidates = deepcopy(result.aggregate_coverages)
+        canonical = select_canonical_aggregates(raw_candidates)
         return cls(
-            source_path, CustomerInfo(analysis_date=date.today()), deepcopy(result.contracts),
-            deepcopy(result.aggregate_coverages), deepcopy(result.dental_riders), result,
+            source_path=source_path,
+            customer=CustomerInfo(analysis_date=date.today()),
+            contracts=deepcopy(result.contracts),
+            aggregates=list(canonical.aggregates),
+            raw_aggregate_candidates=raw_candidates,
+            aggregate_conflict_warnings=list(canonical.warnings),
+            riders=deepcopy(result.dental_riders),
+            result=result,
         )
 
     def add_aggregate(self) -> AggregateCoverage:
         item = AggregateCoverage("새 전체 보장", confidence=Confidence.LOW, confidence_reason="사용자 추가")
         self.aggregates.append(item)
+        self.raw_aggregate_candidates.append(item)
         return item
 
     def add_rider(self) -> DentalRider:

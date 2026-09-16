@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from dental_coverage_analyzer.core.money import parse_money
+from dental_coverage_analyzer.core.processing import AggregateValidity, assess_aggregate
 from dental_coverage_analyzer.models import (
     AggregateCoverage,
     Confidence,
@@ -232,14 +233,13 @@ class AggregateCoverageParser:
                         [page.page_number], "AggregateCoverage", _normalize_name(raw_name),
                         [str(reported_ratio), str(calculated_ratio)],
                     ))
-                confidence = Confidence.HIGH if evidence in {
-                    "명시적 필드 label", "동일 행 cell과 header의 bbox 열 관계",
-                } else Confidence.MEDIUM
-                if page.effective_source is EffectiveTextSource.OCR:
-                    confidence = Confidence.MEDIUM if page.confidence is not Confidence.LOW else Confidence.LOW
-                elif page.ocr_required:
-                    confidence = Confidence.LOW
-                candidates.append(AggregateCoverage(
+                confidence_reason = (
+                    f"OCR 기반; {evidence}; page_type={page.page_type.value}"
+                    if page.effective_source is EffectiveTextSource.OCR
+                    else f"{evidence}; page_type={page.page_type.value}"
+                    if not page.ocr_required else "OCR 필요 페이지의 Text Layer 결과"
+                )
+                candidate = AggregateCoverage(
                     raw_name=raw_name,
                     normalized_name=_normalize_name(raw_name),
                     category="보철치료" if "보철" in raw_name else "보존치료",
@@ -258,12 +258,33 @@ class AggregateCoverageParser:
                     representative_source=SourceReference(
                         page.page_number, _row_bbox(page, _normalize_name(raw_name)), segment,
                     ),
-                    confidence=confidence,
-                    confidence_reason=(
-                        f"OCR 기반; {evidence}" if page.effective_source is EffectiveTextSource.OCR
-                        else evidence if not page.ocr_required else "OCR 필요 페이지의 Text Layer 결과"
-                    ),
-                ))
+                    confidence=Confidence.MEDIUM,
+                    confidence_reason=confidence_reason,
+                )
+                assessment = assess_aggregate(candidate)
+                # HIGH는 완전하고 논리적으로 유효한 bbox header-cell 근거에만 허용한다.
+                if assessment.validity is AggregateValidity.VALID and evidence == "동일 행 cell과 header의 bbox 열 관계":
+                    candidate.confidence = Confidence.HIGH
+                elif assessment.validity is not AggregateValidity.VALID:
+                    candidate.confidence = Confidence.LOW
+                    code = "AGGREGATE_INCOMPLETE" if assessment.validity is AggregateValidity.INCOMPLETE else "AGGREGATE_LOGIC_INVALID"
+                    issues.append(ValidationIssue(
+                        code, ValidationSeverity.WARNING,
+                        f"'{raw_name}' 후보를 대표값으로 확정하기 어렵습니다: {assessment.reason}",
+                        [page.page_number], "AggregateCoverage", _normalize_name(raw_name),
+                        [
+                            f"권장={recommended}", f"가입={enrolled}",
+                            f"부족={difference}", f"상태={raw_status}",
+                        ],
+                    ))
+                if page.effective_source is EffectiveTextSource.OCR:
+                    if candidate.confidence is Confidence.HIGH:
+                        candidate.confidence = Confidence.MEDIUM
+                    if page.confidence is Confidence.LOW:
+                        candidate.confidence = Confidence.LOW
+                elif page.ocr_required:
+                    candidate.confidence = Confidence.LOW
+                candidates.append(candidate)
         deduplicated, duplicate_issues = deduplicate_aggregate_coverages(candidates)
         return ParserOutput(deduplicated, issues + duplicate_issues)
 

@@ -221,11 +221,19 @@ class MainWindow(QMainWindow):
     def _issues_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
         table = self._table(["등급", "코드", "확인할 내용", "페이지"]); table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        for row, issue in enumerate(self.session.result.validation_issues):
+        row = 0
+        for issue in self.session.result.validation_issues:
             severity = {"INFO":"안내", "WARNING":"주의", "ERROR":"오류"}.get(issue.severity.value, issue.severity.value)
             table.insertRow(row); self._set_row(table, row, [severity, issue.code, issue.message, ", ".join(map(str, issue.page_numbers))])
             color = QColor("#FFF1F2" if issue.severity.value == "ERROR" else "#FFF8E6")
-            for col in range(table.columnCount()): table.item(row, col).setBackground(color)
+            tooltip = "\n".join(issue.raw_values)
+            for col in range(table.columnCount()):
+                table.item(row, col).setBackground(color); table.item(row, col).setToolTip(tooltip)
+            row += 1
+        for warning in self.session.aggregate_conflict_warnings:
+            table.insertRow(row); self._set_row(table, row, ["주의", "AGGREGATE_CANONICAL_CONFLICT", warning, "상세 문구 참조"])
+            for col in range(table.columnCount()): table.item(row, col).setBackground(QColor("#FFF8E6"))
+            row += 1
         layout.addWidget(table); return widget
 
     def _source_tab(self) -> QWidget:
@@ -272,7 +280,10 @@ class MainWindow(QMainWindow):
     def add_rider(self): self.session.add_rider(); self._fill_riders()
     def delete_aggregate(self):
         row = self.aggregate_table.currentRow()
-        if row >= 0: self.session.aggregates.pop(row); self._fill_aggregates()
+        if row >= 0:
+            removed = self.session.aggregates.pop(row)
+            self.session.raw_aggregate_candidates = [item for item in self.session.raw_aggregate_candidates if item is not removed]
+            self._fill_aggregates()
     def delete_rider(self):
         row = self.rider_table.currentRow()
         if row >= 0: self.session.riders.pop(row); self._fill_riders()
@@ -297,7 +308,9 @@ class MainWindow(QMainWindow):
     def report_data(self):
         if not self._sync_tables(): return None
         return build_report_data(
-            self.session.customer, self.session.aggregates, self.session.contracts,
+            self.session.customer,
+            self.session.raw_aggregate_candidates or self.session.aggregates,
+            self.session.contracts,
             self.session.riders,
             self.session.result.validation_issues if self.session.result else [],
         )

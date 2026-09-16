@@ -165,8 +165,10 @@ HTML/CSS template은 package resource로 포함해 `QTextBrowser` 미리보기�
 사용한다.
 
 ReportData는 parser 원본을 변경하지 않고 같은 보철/보존 카테고리 후보 중 보고서 대표값
-하나를 선택한다. 우선순위는 confidence, 권장·가입금액 완전성, 상태·차액의 논리 일관성,
-출처 근거, 이른 source page 순이다. 값이 충돌하면 대표 카드만 표시하되 경고와 기존
+하나를 선택한다. 공통 `select_canonical_aggregates`를 GUI와 보고서가 함께 사용하며,
+원본 후보는 debug JSON과 확인 필요 정보에 그대로 보존한다. 우선순위는 논리 유효성,
+권장·가입금액 완전성, 상태·차액의 수학적 일관성, header/bbox 출처 근거, page type,
+confidence, 이른 source page 순이다. 값이 충돌하면 대표 카드만 표시하되 경고와 기존
 ValidationIssue를 보존한다. 권장금액이 0이거나 불명확하면 보장률을 계산하지 않는다.
 계약 또는 Rider가 없으면 빈 페이지를 만들지 않으며 소량 계약은 첫 페이지 하단에
 배치한다. Rider 금액은 어떤 경우에도 합산하지 않는다.

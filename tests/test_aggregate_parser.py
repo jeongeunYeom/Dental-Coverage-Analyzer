@@ -1,5 +1,5 @@
 from dental_coverage_analyzer.core.parsers.aggregate_parser import AggregateCoverageParser
-from dental_coverage_analyzer.models import PDFDocumentData, PDFPageData, PDFWord, PageType
+from dental_coverage_analyzer.models import Confidence, PDFDocumentData, PDFPageData, PDFWord, PageType
 
 
 def document_with_pages(*texts: str) -> PDFDocumentData:
@@ -109,3 +109,15 @@ def test_difference_mismatch_creates_issue_instead_of_changing_source():
     assert result.items[0].raw_difference == "120만원"
     assert result.items[0].normalized_shortage == 1_500_000
     assert any(issue.code == "DIFFERENCE_MISMATCH" for issue in result.issues)
+
+
+def test_incomplete_or_inconsistent_candidate_cannot_receive_high_confidence():
+    text = "치아보철치료비 권장 50만원 부족 150만원 상태 부족"
+    result = AggregateCoverageParser().parse(document_with_pages(text))
+    assert result.items[0].confidence is Confidence.LOW
+    assert any(issue.code == "AGGREGATE_INCOMPLETE" for issue in result.issues)
+
+    invalid = "치아보존치료비 권장 0원 가입 50만원 부족 0원 상태 미가입"
+    result = AggregateCoverageParser().parse(document_with_pages(invalid))
+    assert result.items[0].confidence is Confidence.LOW
+    assert any(issue.code == "AGGREGATE_LOGIC_INVALID" for issue in result.issues)

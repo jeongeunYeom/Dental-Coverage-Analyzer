@@ -86,11 +86,11 @@ def aggregate(name, *, category="보철치료", confidence=Confidence.MEDIUM, re
     )
 
 
-def test_representative_aggregate_high_confidence_has_first_priority():
+def test_logically_valid_complete_aggregate_beats_high_confidence_incomplete_candidate():
     high_incomplete = aggregate("고신뢰 보철", confidence=Confidence.HIGH, enrolled=None, page=4)
     medium_complete = aggregate("완전한 보철", confidence=Confidence.MEDIUM, page=1)
     selected, warnings = select_representative_aggregates([medium_complete, high_incomplete])
-    assert selected == [high_incomplete]
+    assert selected == [medium_complete]
     assert warnings
 
 
