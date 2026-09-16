@@ -149,3 +149,22 @@ JSON에 기록하며 Aggregate와 계약표 parser가 header-cell bbox 관계를
 `importlib.resources`로 읽는다. PyInstaller에서는 `_MEIPASS`, 개발 checkout에서는
 루트 `config/`를 호환 fallback으로 사용하므로 설정 위치 때문에 parser 구조를 다시
 변경하지 않는다.
+
+## 17. Windows MVP UI와 보고서
+
+PySide6 UI는 parser 결과를 직접 변경하지 않고 `AnalysisSession`에 deep copy하여 수동
+수정한다. 분석은 `QThread`에서 실행하고 analyzer의 progress/cancellation callback을
+사용하므로 GUI event loop를 막지 않는다. 결과 화면은 전체 요약, 계약, Rider, 검토
+이슈와 원본 정보 탭으로 분리한다. 원본 PDF는 운영체제 기본 프로그램으로만 열며 이번
+MVP에서는 bbox highlight viewer를 포함하지 않는다.
+
+보고서는 parser model과 분리된 immutable `ReportData` view model에서 생성한다.
+HTML/CSS template은 package resource로 포함하며 미리보기는 `QTextBrowser`, PDF 저장은
+외부 실행파일이 필요 없는 `QTextDocument`와 `QPrinter`를 사용한다. 권장금액이 없으면
+보장률/progress를 생성하지 않고 Rider 금액은 어떤 경우에도 합산하지 않는다.
+
+Windows 배포는 PyInstaller onedir spec을 기본으로 한다. package config/report resource와
+PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Python 3.11 테스트,
+빌드, ZIP 생성 후 `DentalCoverageAnalyzer-Windows` artifact를 업로드한다. Tesseract가
+없어도 EXE와 수동 보정 workflow는 동작하며 binary/traineddata bundle은 후속 배포 개선
+범위다.

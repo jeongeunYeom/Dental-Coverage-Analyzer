@@ -14,11 +14,15 @@ def _parser() -> argparse.ArgumentParser:
     analyze.add_argument("pdf", type=Path, help="분석할 PDF 경로")
     analyze.add_argument("--json", dest="json_path", type=Path, help="분석 JSON 저장 경로")
     analyze.add_argument("--password", help="암호화된 PDF 암호")
+    subparsers.add_parser("gui", help="치아보험 보장분석표 생성기 GUI를 실행합니다")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "gui":
+        from dental_coverage_analyzer.ui import run_gui
+        return run_gui()
     try:
         result = analyze_pdf(args.pdf, password=args.password)
     except PDFLoadError as exc:

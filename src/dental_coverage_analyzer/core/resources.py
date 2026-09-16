@@ -45,6 +45,15 @@ def load_config(name: str) -> dict[str, Any]:
             return json.load(stream)
 
 
+def load_text_resource(name: str) -> str:
+    """보고서 등 package resource를 source 및 frozen 환경에서 읽는다."""
+    external = project_root() / "resources" / name
+    if external.is_file():
+        return external.read_text(encoding="utf-8")
+    resource = resources.files("dental_coverage_analyzer.resources").joinpath(*name.split("/"))
+    return resource.read_text(encoding="utf-8")
+
+
 @contextmanager
 def bundled_resource(name: str) -> Iterator[Path | None]:
     """선택적 binary resource를 실행 가능한 실제 경로로 노출한다."""
