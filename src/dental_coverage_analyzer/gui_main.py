@@ -1,0 +1,5 @@
+from dental_coverage_analyzer.ui import run_gui
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_gui())
