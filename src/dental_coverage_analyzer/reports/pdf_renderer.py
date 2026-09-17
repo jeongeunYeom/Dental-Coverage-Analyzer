@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import textwrap
 from pathlib import Path
 
 from .generator import DISCLAIMER, format_money
@@ -15,6 +16,22 @@ class ReportPagePlan:
     contracts: tuple[ReportContract, ...] = field(default_factory=tuple)
     riders: tuple[ReportRider, ...] = field(default_factory=tuple)
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    comment: str = ""
+
+
+def _comment_lines(comment: str, width: int = 62) -> list[str]:
+    lines: list[str] = []
+    for paragraph in comment.split("\n"):
+        lines.extend(textwrap.wrap(
+            paragraph, width=width, replace_whitespace=False,
+            drop_whitespace=False, break_long_words=True,
+        ) or [""])
+    return lines
+
+
+def _comment_chunks(comment: str, lines_per_page: int = 22) -> tuple[str, ...]:
+    lines = _comment_lines(comment)
+    return tuple("\n".join(lines[start:start + lines_per_page]) for start in range(0, len(lines), lines_per_page))
 
 
 def plan_report_pages(data: ReportData) -> tuple[ReportPagePlan, ...]:
@@ -36,6 +53,16 @@ def plan_report_pages(data: ReportData) -> tuple[ReportPagePlan, ...]:
     if data.riders:
         for start in range(0, len(data.riders), 7):
             pages.append(ReportPagePlan("riders", riders=data.riders[start:start + 7]))
+    if data.comment.strip():
+        can_attach = (
+            pages[-1].kind == "summary" and len(data.aggregates) <= 2
+            and len(data.aggregate_warnings) <= 1 and len(data.contracts) <= 2
+            and len(_comment_lines(data.comment)) <= 10
+        )
+        if can_attach:
+            pages[-1] = replace(pages[-1], comment=data.comment)
+        else:
+            pages.extend(ReportPagePlan("comment", comment=chunk) for chunk in _comment_chunks(data.comment))
     return tuple(pages)
 
 
@@ -100,18 +127,41 @@ def _draw_page(p, canvas, data, plan, page_no, page_count, is_last, Qt, QColor, 
             y = warning_rect.bottom()
         if plan.contracts:
             y += 34 * scale
-            draw_label(QRectF(margin, y, content.width(), 34 * scale), "가입 보험", 15, text, QFont.Weight.Bold)
+            draw_label(QRectF(margin, y, content.width(), 34 * scale), "가입된 치아보험", 15, text, QFont.Weight.Bold)
             y += 44 * scale
             y = _draw_contract_cards(p, plan.contracts, margin, y, content.width(), scale, draw_label, Qt, QColor, QFont, QRectF, compact=True)
+        elif not data.contracts:
+            y += 34 * scale
+            draw_label(QRectF(margin, y, content.width(), 34 * scale), "가입된 치아보험", 15, text, QFont.Weight.Bold)
+            y += 44 * scale
+            empty = QRectF(margin, y, content.width(), 72 * scale)
+            p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#FFFFFF")); p.drawRoundedRect(empty, 16 * scale, 16 * scale)
+            draw_label(empty.adjusted(22 * scale, 0, -22 * scale, 0), "없음", 14, text, QFont.Weight.Bold)
     elif plan.kind == "aggregates":
         y = _draw_section_header(p, content, y, "전체 치아보장 요약", "추가 확인 항목", draw_label, QColor, Qt, QRectF, scale)
         _draw_aggregate_cards(p, plan.aggregates, margin, y, content.width(), scale, draw_label, Qt, QColor, QFont, QRectF)
     elif plan.kind == "contracts":
         y = _draw_section_header(p, content, y, "가입된 치아보험", "원본 자료에서 확인된 계약정보", draw_label, QColor, Qt, QRectF, scale)
         _draw_contract_cards(p, plan.contracts, margin, y, content.width(), scale, draw_label, Qt, QColor, QFont, QRectF)
-    else:
+    elif plan.kind == "riders":
         y = _draw_section_header(p, content, y, "세부 치아보장", "지급조건과 지급단위가 다른 담보는 합산하지 않았습니다", draw_label, QColor, Qt, QRectF, scale)
         _draw_riders(p, plan.riders, margin, y, content.width(), scale, draw_label, Qt, QColor, QFont, QRectF)
+    else:
+        y = 90 * scale
+
+    if plan.comment:
+        disclaimer_top = canvas.height() - 190 * scale if is_last else canvas.height() - 70 * scale
+        p.setFont(font(10))
+        flags = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap
+        measured = QFontMetricsF(p.font()).boundingRect(
+            QRectF(0, 0, content.width() - 48 * scale, canvas.height()), flags, plan.comment,
+        )
+        comment_height = max(112 * scale, measured.height() + 72 * scale)
+        comment_top = max(y + 24 * scale, disclaimer_top - comment_height - 18 * scale)
+        comment_rect = QRectF(margin, comment_top, content.width(), comment_height)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#F1F0FF")); p.drawRoundedRect(comment_rect, 16 * scale, 16 * scale)
+        draw_label(QRectF(comment_rect.left() + 24 * scale, comment_rect.top() + 14 * scale, comment_rect.width() - 48 * scale, 30 * scale), "상담 코멘트", 12, QColor("#625EF5"), QFont.Weight.Bold)
+        draw_label(QRectF(comment_rect.left() + 24 * scale, comment_rect.top() + 48 * scale, comment_rect.width() - 48 * scale, comment_rect.height() - 62 * scale), plan.comment, 10, text, flags=flags)
 
     if is_last:
         box = QRectF(margin, canvas.height() - 190 * scale, content.width(), 105 * scale)

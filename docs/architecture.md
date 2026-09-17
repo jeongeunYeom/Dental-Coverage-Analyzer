@@ -181,6 +181,13 @@ DentalRider가 동일 contract identity로 연결된 계약만 포함할 수 있
 Aggregate 충돌 경고는 하나의 간단한 안내로 합치고 page·raw 값 등 상세 근거는 GUI의
 확인 필요 탭과 debug JSON에만 남긴다.
 
+사용자 상담 코멘트는 `AnalysisSession.comment`에서 `ReportData.comment`로 원문과 줄바꿈을
+그대로 전달한다. HTML 미리보기에서는 escape 후 줄바꿈만 `<br>`로 표현하고, QPainter
+PDF에서는 plain text와 `TextWordWrap`으로 그린다. 짧은 코멘트는 마지막 페이지의 면책문구
+위에 배치하며, 예상 줄 수가 많거나 마지막 페이지가 복잡하면 전용 comment page로 나눈다.
+보고서용 치아보험 계약이 0건이면 별도 계약 페이지를 만들지 않고 첫 요약 페이지에
+`가입된 치아보험`과 `없음`만 표시한다.
+
 Windows 배포는 PyInstaller onedir spec을 기본으로 한다. package config/report resource와
 PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Python 3.11 테스트,
 빌드, ZIP 생성 후 `DentalCoverageAnalyzer-Windows` artifact를 업로드한다. Tesseract가

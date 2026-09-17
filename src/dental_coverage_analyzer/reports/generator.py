@@ -54,6 +54,13 @@ def _contracts(items) -> str:
     )
 
 
+def _comment(value: str) -> str:
+    if not value.strip():
+        return ""
+    safe_text = escape(value).replace("\n", "<br>")
+    return f'<div class="comment-card"><h2>상담 코멘트</h2><div class="comment-text">{safe_text}</div></div>'
+
+
 def _riders(items) -> str:
     grouped = defaultdict(list)
     for rider in items:
@@ -85,12 +92,15 @@ def render_report_html(data: ReportData) -> str:
     body.extend(f'<div class="warning">⚠ {escape(warning)}</div>' for warning in data.aggregate_warnings)
     attach_contracts = bool(data.contracts) and len(data.contracts) <= 2 and len(data.aggregates) <= 2 and len(data.aggregate_warnings) <= 1
     if attach_contracts:
-        body.append(f'<h2>가입 보험</h2>{_contracts(data.contracts)}')
+        body.append(f'<h2>가입된 치아보험</h2>{_contracts(data.contracts)}')
+    elif not data.contracts:
+        body.append('<h2>가입된 치아보험</h2><div class="empty-contracts">없음</div>')
     body.append('</section>')
     if data.contracts and not attach_contracts:
         body.append(f'<div class="page-break"></div><section class="page"><h1>가입된 치아보험</h1>{_contracts(data.contracts)}</section>')
     if data.riders:
         body.append(f'<div class="page-break"></div><section class="page"><h1>세부 치아보장</h1><p class="secondary">지급조건과 지급단위가 다른 담보는 합산하지 않았습니다.</p>{_riders(data.riders)}</section>')
+    body.append(_comment(data.comment))
     body.append(f'<div class="disclaimer">{escape(DISCLAIMER)}<br><b>서로 다른 지급단위의 세부 담보는 단순 합산하지 않았습니다.</b></div>')
     return template.replace("{{CSS}}", css).replace("{{BODY}}", "".join(body))
 

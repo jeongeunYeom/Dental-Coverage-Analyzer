@@ -22,6 +22,7 @@ class AnalysisSession:
     result: PDFAnalysisResult | None = None
     raw_aggregate_candidates: list[AggregateCoverage] = field(default_factory=list)
     aggregate_conflict_warnings: list[str] = field(default_factory=list)
+    comment: str = ""
 
     @classmethod
     def from_result(cls, source_path: str, result: PDFAnalysisResult) -> "AnalysisSession":

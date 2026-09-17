@@ -8,13 +8,16 @@ from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QStackedWidget,
-    QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget,
+    QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult, analyze_pdf
 from dental_coverage_analyzer.core.processing import normalize_aggregate_values
 from dental_coverage_analyzer.models import Confidence
-from dental_coverage_analyzer.reports import build_report_data, export_report_pdf, format_money, render_report_html
+from dental_coverage_analyzer.reports import (
+    build_report_data, export_report_pdf, format_money, render_report_html,
+    select_dental_report_contracts,
+)
 from dental_coverage_analyzer.reports.theme import CATEGORY_COLORS, DEFAULT_COLOR
 
 from .session import (
@@ -176,6 +179,12 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._riders_tab(), "세부 치아담보")
         self.tabs.addTab(self._issues_tab(), "확인 필요")
         self.tabs.addTab(self._source_tab(), "원본 정보")
+        root.addWidget(QLabel("상담 코멘트"))
+        self.comment_edit = QTextEdit()
+        self.comment_edit.setPlaceholderText("보고서에 함께 표시할 코멘트를 입력하세요.")
+        self.comment_edit.setPlainText(self.session.comment)
+        self.comment_edit.setMaximumHeight(100)
+        root.addWidget(self.comment_edit)
         actions = QHBoxLayout(); back = QPushButton("다른 PDF 분석"); back.clicked.connect(lambda: self.stack.setCurrentWidget(self.start_page))
         debug = QPushButton("Debug JSON 저장"); debug.clicked.connect(self.save_debug)
         preview = QPushButton("보고서 미리보기"); preview.clicked.connect(self.preview_report)
@@ -204,7 +213,12 @@ class MainWindow(QMainWindow):
     def _contracts_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
         self.contract_table = self._table(["보험사", "상품명", "가입일", "보험기간", "월보험료(원)", "납입기간", "납입주기", "만기", "출처 페이지", "confidence"])
-        for row, item in enumerate(self.session.contracts):
+        self.dental_contracts = select_dental_report_contracts(self.session.contracts, self.session.riders)
+        if not self.dental_contracts:
+            empty = QLabel("없음"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setStyleSheet("font-size:18px;font-weight:700;color:#858CA0;padding:24px")
+            layout.addWidget(empty)
+        for row, item in enumerate(self.dental_contracts):
             self.contract_table.insertRow(row)
             values = [item.insurer, item.product_name, item.enrollment_date.isoformat() if item.enrollment_date else None, item.coverage_period, item.monthly_premium, item.payment_period, item.payment_cycle, item.maturity, ", ".join(str(s.page) for s in item.sources), {"HIGH":"높음","MEDIUM":"보통","LOW":"낮음"}.get(item.confidence.value, "확인 필요")]
             self._set_row(self.contract_table, row, values)
@@ -298,12 +312,13 @@ class MainWindow(QMainWindow):
                 item.raw_name = self.aggregate_table.item(row, 0).text(); item.category = optional_text(self.aggregate_table.item(row, 1).text())
                 item.recommended_amount = parse_optional_int(self.aggregate_table.item(row, 2).text()); item.enrolled_amount = parse_optional_int(self.aggregate_table.item(row, 3).text())
                 item.shortage_amount = parse_optional_int(self.aggregate_table.item(row, 4).text()); item.normalized_shortage = item.shortage_amount; item.status = optional_text(self.aggregate_table.item(row, 5).text())
-            for row, item in enumerate(self.session.contracts):
+            for row, item in enumerate(self.dental_contracts):
                 item.insurer = optional_text(self.contract_table.item(row, 0).text()); item.product_name = optional_text(self.contract_table.item(row, 1).text()); item.coverage_period = optional_text(self.contract_table.item(row, 3).text())
                 item.monthly_premium = parse_optional_int(self.contract_table.item(row, 4).text()); item.payment_period = optional_text(self.contract_table.item(row, 5).text()); item.payment_cycle = optional_text(self.contract_table.item(row, 6).text()); item.maturity = optional_text(self.contract_table.item(row, 7).text())
             for row, item in enumerate(self.session.riders):
                 item.raw_name = self.rider_table.item(row, 0).text(); item.category = optional_text(self.rider_table.item(row, 1).text()); item.insurer = optional_text(self.rider_table.item(row, 2).text()); item.product_name = optional_text(self.rider_table.item(row, 3).text())
                 item.enrolled_amount = parse_optional_int(self.rider_table.item(row, 4).text()); item.cause_type = parse_cause(self.rider_table.item(row, 5).text()); item.payment_unit = parse_payment_unit(self.rider_table.item(row, 6).text())
+            self.session.comment = self.comment_edit.toPlainText()
             return True
         except (ValueError, AttributeError) as exc:
             QMessageBox.warning(self, "입력값 확인", f"금액은 숫자(원 단위)로 입력해 주세요.\n{exc}"); return False
@@ -316,6 +331,7 @@ class MainWindow(QMainWindow):
             self.session.contracts,
             self.session.riders,
             self.session.result.validation_issues if self.session.result else [],
+            self.session.comment,
         )
 
     def preview_report(self):
@@ -346,6 +362,7 @@ class MainWindow(QMainWindow):
         QTabBar::tab { padding:11px 18px; } QTabBar::tab:selected { color:#625EF5; font-weight:700; }
         QTableWidget { background:white; border:0; gridline-color:#ECEEF4; } QHeaderView::section { background:#F0F1F7; padding:8px; border:0; font-weight:700; }
         QLineEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
+        QTextEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
         QProgressBar { border:0; border-radius:6px; background:#E6E7F0; height:12px; } QProgressBar::chunk { border-radius:6px; background:#625EF5; }
         """)
 
