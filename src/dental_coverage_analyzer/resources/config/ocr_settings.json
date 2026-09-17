@@ -1,0 +1,8 @@
+{
+  "dpi": 250,
+  "max_pixels": 25000000,
+  "minimum_confidence": 65.0,
+  "high_confidence": 85.0,
+  "conflict_term_minimum": 2,
+  "conflict_similarity": 0.25
+}

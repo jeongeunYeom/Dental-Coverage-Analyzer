@@ -1,0 +1,57 @@
+{
+  "COVER": {
+    "positive_keywords": {"보장분석": 2, "고객님": 1, "컨설팅": 1},
+    "negative_keywords": {"가입금액": 2, "담보 이름": 2},
+    "minimum_score": 2
+  },
+  "SUMMARY": {
+    "positive_keywords": {"요약": 2, "보장현황": 2, "보험 현황": 1},
+    "negative_keywords": {"세부": 1},
+    "minimum_score": 2
+  },
+  "ONE_PAGE_SUMMARY": {
+    "positive_keywords": {"한장 보장 현황": 5, "한눈에 보기": 3, "보장 현황": 1},
+    "negative_keywords": {"상품별 상세": 3},
+    "minimum_score": 3
+  },
+  "CONTRACT_LIST": {
+    "positive_keywords": {"계약별 가입정보": 4, "보험회사": 2, "상품명": 2, "보험기간": 1, "월보험료": 1},
+    "negative_keywords": {"담보 이름": 2},
+    "minimum_score": 4
+  },
+  "COVERAGE_ANALYSIS": {
+    "positive_keywords": {"보장별 분석": 5, "권장 가입금액": 2, "현재 가입금액": 2, "보장 상세 진단": 2, "부족금액": 1},
+    "negative_keywords": {"상품별 상세": 3},
+    "minimum_score": 4
+  },
+  "COVERAGE_DETAIL": {
+    "positive_keywords": {"보장별 상세": 5, "보장 상세 내역": 5, "가입 담보": 1},
+    "negative_keywords": {},
+    "minimum_score": 4
+  },
+  "PRODUCT_MATRIX": {
+    "positive_keywords": {"세부 가입 현황": 5, "상품별 가입": 2, "보험회사": 1, "가입금액": 1},
+    "negative_keywords": {"담보 이름": 1},
+    "minimum_score": 4
+  },
+  "PRODUCT_DETAIL": {
+    "positive_keywords": {"상품별 상세 현황": 6, "담보 이름": 2, "신용정보원 담보 이름": 2, "가입금액": 1},
+    "negative_keywords": {"권장 가입금액": 2},
+    "minimum_score": 5
+  },
+  "DIAGNOSIS_DETAIL": {
+    "positive_keywords": {"담보별 진단현황": 5, "진단 상세": 3, "진단현황": 2},
+    "negative_keywords": {},
+    "minimum_score": 4
+  },
+  "NOTICE": {
+    "positive_keywords": {"안내 및 유의사항": 6, "유의사항": 4, "꼭 확인": 2, "면책": 1},
+    "negative_keywords": {},
+    "minimum_score": 3
+  },
+  "GRAPH": {
+    "positive_keywords": {"그래프": 3, "보장 비율": 2, "차트": 3},
+    "negative_keywords": {"담보 이름": 2},
+    "minimum_score": 3
+  }
+}
