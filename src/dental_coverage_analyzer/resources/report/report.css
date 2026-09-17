@@ -23,4 +23,8 @@ h1 { font-size:25pt; margin:2mm 0 5mm; } h2 { font-size:17pt; margin:7mm 0 4mm; 
 .rider-row { margin:2mm 0; width:100%; }
 .rider-name { font-size:11.5pt; font-weight:700; } .rider-amount { text-align:right; font-size:14pt; font-weight:700; }
 .disclaimer { background:#EEF0F5; color:#757C90; border-radius:10px; padding:4mm; margin-top:9mm; font-size:8.5pt; }
+.empty-contracts { background:#FFF; border-radius:15px; padding:6mm; color:#252A3D; font-size:14pt; font-weight:700; }
+.comment-card { background:#F1F0FF; border-radius:15px; padding:6mm; margin-top:7mm; page-break-inside:avoid; }
+.comment-card h2 { color:#625EF5; margin:0 0 3mm; font-size:14pt; }
+.comment-text { white-space:pre-wrap; color:#252A3D; font-size:10pt; line-height:1.55; }
 .page-break { page-break-before:always; }

@@ -175,8 +175,85 @@ def test_dynamic_page_plan_omits_empty_contract_and_rider_pages():
     assert len(pages) == 1
     assert pages[0].kind == "summary"
     html = render_report_html(data)
-    assert "가입된 치아보험" not in html
+    assert "가입된 치아보험" in html
+    assert "없음" in html
     assert "세부 치아보장" not in html
+
+
+def test_comment_is_preserved_escaped_and_omitted_when_blank():
+    comment = "보철치료 보장이 부족합니다.\n보험증권 확인이 필요합니다.\n<script>alert(1)</script>"
+    data = build_report_data(*sample_data(), comment=comment)
+    assert data.comment == comment
+    html = render_report_html(data)
+    assert "상담 코멘트" in html
+    assert "보철치료 보장이 부족합니다.<br>보험증권 확인이 필요합니다." in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script>alert(1)</script>" not in html
+
+    blank = render_report_html(build_report_data(*sample_data(), comment="  \n"))
+    assert "상담 코멘트" not in blank
+
+
+def test_no_dental_contract_renders_only_none_not_general_products():
+    contracts = [
+        InsuranceContract(insurer="삼성화재", product_name="종합보험"),
+        InsuranceContract(insurer="메리츠화재", product_name="암보험"),
+        InsuranceContract(insurer="KDB생명", product_name="연금보험"),
+    ]
+    data = build_report_data(CustomerInfo(), [], contracts, [])
+    html = render_report_html(data)
+    assert data.contracts == ()
+    assert "가입된 치아보험" in html and "없음" in html
+    assert all(contract.product_name not in html for contract in contracts)
+    assert [page.kind for page in plan_report_pages(data)] == ["summary"]
+
+
+def test_dental_contract_card_does_not_render_none_label():
+    data = build_report_data(*sample_data())
+    html = render_report_html(data)
+    assert "(무)가명 치아보험" in html
+    assert '<div class="empty-contracts">없음</div>' not in html
+
+
+def test_long_comment_gets_dedicated_pages_without_being_dropped():
+    comment = "\n".join(f"상담 메모 {index}" for index in range(35))
+    data = build_report_data(*sample_data(), comment=comment)
+    plans = plan_report_pages(data)
+    comment_pages = [page for page in plans if page.comment]
+    assert len(comment_pages) >= 2
+    assert "\n".join(page.comment for page in comment_pages) == comment
+
+
+def test_pdf_comment_text_smoke(tmp_path: Path, monkeypatch):
+    pytest.importorskip("PySide6", reason="PySide6가 필요한 PDF comment smoke test")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
+    app = QApplication.instance() or QApplication([])
+    comment = "보철치료 보장이 부족합니다.\n보험증권 확인이 필요합니다."
+    data = build_report_data(*sample_data(), comment=comment)
+    assert data.comment == comment
+    plans = plan_report_pages(data)
+    assert any(page.comment == comment for page in plans)
+    html = render_report_html(data)
+    assert "상담 코멘트" in html
+    assert "보철치료 보장이 부족합니다." in html
+
+    output = export_report_pdf(data, tmp_path / "comment.pdf")
+    assert output.exists()
+    assert output.stat().st_size > 1000
+    assert output.read_bytes().startswith(b"%PDF")
+    try:
+        import fitz
+    except ImportError:
+        fitz = None
+    if fitz is not None:
+        document = fitz.open(output)
+        assert document.page_count >= 1
+        document.close()
+    del app
 
 
 def test_small_contract_list_is_attached_to_summary_and_riders_add_only_real_page():

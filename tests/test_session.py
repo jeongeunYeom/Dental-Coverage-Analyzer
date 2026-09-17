@@ -23,6 +23,16 @@ def test_manual_session_add_delete_data_flows_to_report():
     assert parse_optional_int("정보 없음") is None
 
 
+def test_session_comment_is_passed_to_report_without_changes():
+    comment = "보철치료 보장이 부족합니다.\n보험증권 확인이 필요합니다."
+    session = AnalysisSession("synthetic.pdf", customer=CustomerInfo(name="가명고객"), comment=comment)
+    data = build_report_data(
+        session.customer, session.aggregates, session.contracts, session.riders,
+        comment=session.comment,
+    )
+    assert data.comment == comment
+
+
 def test_session_exposes_only_canonical_aggregates_and_preserves_raw_candidates(tmp_path):
     from test_canonical_aggregates import actual_conflicting_candidates
 

@@ -56,6 +56,7 @@ class ReportData:
     riders: tuple[ReportRider, ...] = field(default_factory=tuple)
     aggregate_warnings: tuple[str, ...] = field(default_factory=tuple)
     validation_issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
+    comment: str = ""
 
 
 def _first_page(item: AggregateCoverage) -> int:
@@ -97,7 +98,7 @@ def _contract_identity(contract: InsuranceContract) -> str:
     return "|".join(values)
 
 
-def _report_contracts(
+def select_dental_report_contracts(
     contracts: list[InsuranceContract], riders: list[DentalRider],
 ) -> list[InsuranceContract]:
     detector = DentalProductDetector()
@@ -118,9 +119,10 @@ def build_report_data(
     contracts: list[InsuranceContract],
     riders: list[DentalRider],
     validation_issues: list[ValidationIssue] | None = None,
+    comment: str = "",
 ) -> ReportData:
     representatives, warnings = select_representative_aggregates(aggregates)
-    dental_contracts = _report_contracts(contracts, riders)
+    dental_contracts = select_dental_report_contracts(contracts, riders)
     customer_warning = (
         "원본 자료에서 일부 보장항목의 값이 서로 다르게 확인되어 검증 가능한 대표값을 표시했습니다. "
         "자세한 내용은 프로그램의 '확인 필요' 탭에서 확인할 수 있습니다."
@@ -140,4 +142,5 @@ def build_report_data(
         ) for item in riders),
         aggregate_warnings=(customer_warning,) if warnings else (),
         validation_issues=tuple(validation_issues or ()),
+        comment=comment,
     )

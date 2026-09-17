@@ -37,9 +37,14 @@ def test_gui_summary_uses_two_canonical_rows_for_four_raw_candidates(tmp_path, m
     result.aggregate_coverages = actual_conflicting_candidates()
     window = MainWindow()
     window.session = AnalysisSession.from_result("synthetic.pdf", result)
-    summary = window._summary_tab()
+    window._build_result_page()
+    summary = window.tabs.widget(0)
 
     assert window.aggregate_table.rowCount() == 2
     assert len([frame for frame in summary.findChildren(QFrame) if frame.objectName() == "card"]) == 2
+    assert window.contract_table.rowCount() == 0
+    comment = "보철치료 보장이 부족합니다.\n보험증권 확인이 필요합니다."
+    window.comment_edit.setPlainText(comment)
+    assert window.report_data().comment == comment
     window.close()
     del app
