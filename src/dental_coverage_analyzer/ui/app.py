@@ -246,11 +246,32 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.result_page); self.stack.removeWidget(old); old.deleteLater()
 
     def _connect_dirty_signals(self) -> None:
-        self.customer_name.textChanged.connect(self._mark_dirty)
-        self.comment_edit.textChanged.connect(self._mark_dirty)
+        self.customer_name.textChanged.connect(self._on_customer_name_changed)
+        self.comment_edit.textChanged.connect(self._on_comment_changed)
         self.aggregate_table.cellChanged.connect(self._mark_dirty)
         self.contract_table.cellChanged.connect(self._mark_dirty)
         self.rider_table.cellChanged.connect(self._mark_dirty)
+
+    def _on_comment_changed(self) -> None:
+        if not self.session:
+            return
+        self.session.comment = self.comment_edit.toPlainText()
+        self._mark_dirty()
+
+    def _on_customer_name_changed(self, text: str) -> None:
+        if not self.session:
+            return
+        self.session.customer.name = text.strip() or None
+        self._mark_dirty()
+
+    def _sync_transient_fields(self) -> None:
+        """Persist simple editor fields without validating the editable tables."""
+        if not self.session:
+            return
+        if hasattr(self, "customer_name"):
+            self.session.customer.name = self.customer_name.text().strip() or None
+        if hasattr(self, "comment_edit"):
+            self.session.comment = self.comment_edit.toPlainText()
 
     def _mark_dirty(self, *_args) -> None:
         if self.session:
@@ -432,12 +453,20 @@ class MainWindow(QMainWindow):
         if path: self.session.result.export_json(path)
 
     def open_branding_settings(self) -> None:
+        self._sync_transient_fields()
         dialog = BrandingSettingsDialog(self.branding, self)
         if dialog.exec() == dialog.DialogCode.Accepted:
-            self.branding = dialog.settings
-            try: save_settings(self.branding)
-            except OSError: QMessageBox.warning(self, "설정 저장", "설정을 저장할 수 없습니다."); return
-            self._apply_style()
+            self._apply_branding_settings(dialog.settings)
+
+    def _apply_branding_settings(self, settings: BrandingSettings) -> None:
+        """Apply global branding without rebuilding or replacing result editors."""
+        self._sync_transient_fields()
+        self.branding = settings
+        try: save_settings(self.branding)
+        except OSError:
+            QMessageBox.warning(self, "설정 저장", "설정을 저장할 수 없습니다.")
+            return
+        self._apply_style()
 
     def _show_evidence(self, evidence) -> None:
         if self.session:
