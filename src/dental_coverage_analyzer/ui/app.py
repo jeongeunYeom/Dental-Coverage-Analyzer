@@ -118,7 +118,7 @@ class PreviewWindow(QMainWindow):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, *, enable_startup_prompts: bool = True) -> None:
         super().__init__()
         self.setWindowTitle(APP_TITLE)
         self.resize(1180, 820)
@@ -140,8 +140,12 @@ class MainWindow(QMainWindow):
         self.autosave_timer.timeout.connect(self._autosave)
         self.autosave_timer.start()
         self._apply_style()
-        QTimer.singleShot(0, self._check_autosave_recovery)
-        if not self.branding.onboarding_completed:
+        # Startup prompts are enabled for the real application.  Tests and other
+        # non-interactive embedders can explicitly disable them without changing
+        # the persisted onboarding/recovery behaviour used by end users.
+        if enable_startup_prompts:
+            QTimer.singleShot(0, self._check_autosave_recovery)
+        if enable_startup_prompts and not self.branding.onboarding_completed:
             QTimer.singleShot(50, self._show_onboarding)
 
     def _setup_project_menu(self) -> None:

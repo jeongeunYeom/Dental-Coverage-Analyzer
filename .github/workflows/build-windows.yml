@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-windows:
+    timeout-minutes: 20
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +22,7 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+        run: python -m pytest -vv --durations=20 --timeout=120
       - name: Build onedir application
         run: python -m PyInstaller --noconfirm --clean DentalCoverageAnalyzer.spec
       - name: Create distribution ZIP

@@ -22,6 +22,9 @@ def test_branded_pdf_smoke(tmp_path):
     pytest.importorskip("PySide6")
     from dental_coverage_analyzer.reports import export_report_pdf
     data = ReportData("가명고객", date(2026, 9, 18), branding=BrandingSettings("가상 컨설팅", "홍길동"))
-    output = export_report_pdf(data, tmp_path / "branded.pdf")
+    try:
+        output = export_report_pdf(data, tmp_path / "branded.pdf")
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
     assert output.read_bytes().startswith(b"%PDF")
     assert output.stat().st_size > 1000
