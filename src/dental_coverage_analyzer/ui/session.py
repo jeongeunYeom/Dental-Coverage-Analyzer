@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult
 from dental_coverage_analyzer.core.processing import select_canonical_aggregates
@@ -23,6 +24,16 @@ class AnalysisSession:
     raw_aggregate_candidates: list[AggregateCoverage] = field(default_factory=list)
     aggregate_conflict_warnings: list[str] = field(default_factory=list)
     comment: str = ""
+    project_path: str | None = None
+    project_created_at: str | None = None
+    is_dirty: bool = False
+
+    @property
+    def original_pdf_available(self) -> bool:
+        return bool(self.source_path and Path(self.source_path).is_file())
+
+    def mark_dirty(self) -> None:
+        self.is_dirty = True
 
     @classmethod
     def from_result(cls, source_path: str, result: PDFAnalysisResult) -> "AnalysisSession":

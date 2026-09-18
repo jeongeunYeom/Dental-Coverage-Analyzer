@@ -188,6 +188,20 @@ PDF에서는 plain text와 `TextWordWrap`으로 그린다. 짧은 코멘트는 �
 보고서용 치아보험 계약이 0건이면 별도 계약 페이지를 만들지 않고 첫 요약 페이지에
 `가입된 치아보험`과 `없음`만 표시한다.
 
+## 18. 프로젝트 저장과 자동복구
+
+`.dca`는 pickle을 사용하지 않는 명시적 JSON 프로젝트 형식이며 `schema_version=1`, 앱
+버전, 생성·수정 시각, 원본 PDF 경로, 고객·canonical/raw Aggregate·계약·Rider·검증 이슈,
+코멘트, provider와 문서 metadata를 저장한다. source page/bbox/raw text provenance도 각
+도메인 객체와 함께 보존한다. 저장은 같은 디렉터리의 임시 파일을 fsync한 뒤 `os.replace`
+하는 atomic 방식이며 overwrite 전에 단일 `.bak`을 유지한다.
+
+UI는 마지막 저장 이후 고객명, 코멘트와 편집 테이블의 변경 및 추가·삭제를 dirty 상태로
+추적한다. 30초 timer는 dirty 작업만 `%LOCALAPPDATA%/DentalCoverageAnalyzer/autosave`에
+저장하고 원본 PDF는 복사하지 않는다. 시작 시 recovery 파일을 복구·삭제·나중에 처리할 수
+있으며 정상 저장/종료 시 정리한다. 최근 프로젝트 설정에는 최대 5개의 `.dca` 경로만
+기록한다. 미래 schema는 안전하게 거부하고 손상 JSON은 사용자용 오류로 변환한다.
+
 Windows 배포는 PyInstaller onedir spec을 기본으로 한다. package config/report resource와
 PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Python 3.11 테스트,
 빌드, ZIP 생성 후 `DentalCoverageAnalyzer-Windows` artifact를 업로드한다. Tesseract가

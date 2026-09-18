@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtCore import QThread, QTimer, Qt, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QStackedWidget,
@@ -23,6 +23,11 @@ from dental_coverage_analyzer.reports.theme import CATEGORY_COLORS, DEFAULT_COLO
 from .session import (
     AnalysisSession, cause_label, optional_text, parse_cause, parse_optional_int,
     parse_payment_unit, payment_label,
+)
+from .project_store import (
+    FutureProjectVersionError, ProjectError, autosave_path, delete_autosave,
+    load_project, load_recent_projects, remember_project, remove_recent_project,
+    save_project as save_project_file,
 )
 
 
@@ -115,13 +120,38 @@ class MainWindow(QMainWindow):
         self.session: AnalysisSession | None = None
         self.worker: AnalysisThread | None = None
         self.preview_window: PreviewWindow | None = None
+        self._deferred_autosave = False
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
         self.start_page = self._build_start_page()
         self.result_page = QWidget()
         self.stack.addWidget(self.start_page)
         self.stack.addWidget(self.result_page)
+        self._setup_project_menu()
+        self.autosave_timer = QTimer(self)
+        self.autosave_timer.setInterval(30_000)
+        self.autosave_timer.timeout.connect(self._autosave)
+        self.autosave_timer.start()
         self._apply_style()
+        QTimer.singleShot(0, self._check_autosave_recovery)
+
+    def _setup_project_menu(self) -> None:
+        menu = self.menuBar().addMenu("파일")
+        open_action = QAction("프로젝트 열기", self); open_action.setShortcut(QKeySequence.StandardKey.Open); open_action.triggered.connect(self.open_project)
+        save_action = QAction("프로젝트 저장", self); save_action.setShortcut(QKeySequence.StandardKey.Save); save_action.triggered.connect(self.save_project)
+        save_as_action = QAction("다른 이름으로 저장", self); save_as_action.setShortcut(QKeySequence("Ctrl+Shift+S")); save_as_action.triggered.connect(lambda _checked=False: self.save_project(save_as=True))
+        menu.addAction(open_action); menu.addAction(save_action); menu.addAction(save_as_action)
+        self.recent_menu = menu.addMenu("최근 프로젝트")
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self) -> None:
+        self.recent_menu.clear()
+        recent = load_recent_projects()
+        if not recent:
+            action = self.recent_menu.addAction("없음"); action.setEnabled(False); return
+        for path in recent:
+            action = self.recent_menu.addAction(path)
+            action.triggered.connect(lambda _checked=False, value=path: self.open_project(value))
 
     def _build_start_page(self) -> QWidget:
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(90, 60, 90, 60)
@@ -132,8 +162,9 @@ class MainWindow(QMainWindow):
         self.file_label = QLabel("선택된 PDF 없음"); self.file_label.setObjectName("fileLabel")
         buttons = QHBoxLayout()
         choose = QPushButton("PDF 선택"); choose.clicked.connect(lambda: self.select_pdf(""))
+        open_project = QPushButton("프로젝트 열기"); open_project.clicked.connect(self.open_project)
         self.analyze_button = QPushButton("분석 시작"); self.analyze_button.setEnabled(False); self.analyze_button.clicked.connect(self.start_analysis)
-        buttons.addWidget(choose); buttons.addWidget(self.analyze_button)
+        buttons.addWidget(choose); buttons.addWidget(open_project); buttons.addWidget(self.analyze_button)
         self.progress = QProgressBar(); self.progress.hide()
         self.progress_label = QLabel(""); self.progress_label.hide()
         layout.addWidget(title); layout.addWidget(subtitle); layout.addSpacing(25); layout.addWidget(self.drop, 1)
@@ -162,7 +193,8 @@ class MainWindow(QMainWindow):
 
     def analysis_completed(self, result: PDFAnalysisResult) -> None:
         self.session = AnalysisSession.from_result(self.path or "", result)
-        self._build_result_page(); self.stack.setCurrentWidget(self.result_page)
+        self.session.is_dirty = True
+        self._build_result_page(); self.stack.setCurrentWidget(self.result_page); self._update_window_title()
         if any(issue.code == "OCR_NOT_AVAILABLE" for issue in result.validation_issues):
             QMessageBox.information(self, "OCR 제한", "OCR을 사용할 수 없어 일부 페이지는 수동 확인이 필요합니다.")
 
@@ -171,6 +203,7 @@ class MainWindow(QMainWindow):
         self.result_page = QWidget(); root = QVBoxLayout(self.result_page); root.setContentsMargins(24, 18, 24, 18)
         top = QHBoxLayout(); heading = QLabel("분석 결과"); heading.setObjectName("sectionTitle")
         self.customer_name = QLineEdit(); self.customer_name.setPlaceholderText("고객명 직접 입력 (선택)")
+        self.customer_name.setText(self.session.customer.name or "")
         top.addWidget(heading); top.addStretch(); top.addWidget(QLabel("고객명")); top.addWidget(self.customer_name)
         root.addLayout(top)
         self.tabs = QTabWidget(); root.addWidget(self.tabs, 1)
@@ -185,12 +218,29 @@ class MainWindow(QMainWindow):
         self.comment_edit.setPlainText(self.session.comment)
         self.comment_edit.setMaximumHeight(100)
         root.addWidget(self.comment_edit)
-        actions = QHBoxLayout(); back = QPushButton("다른 PDF 분석"); back.clicked.connect(lambda: self.stack.setCurrentWidget(self.start_page))
+        actions = QHBoxLayout(); back = QPushButton("다른 PDF 분석"); back.clicked.connect(self.start_other_pdf)
         debug = QPushButton("Debug JSON 저장"); debug.clicked.connect(self.save_debug)
         preview = QPushButton("보고서 미리보기"); preview.clicked.connect(self.preview_report)
         save = QPushButton("PDF 저장"); save.setObjectName("primaryButton"); save.clicked.connect(self.save_report)
         actions.addWidget(back); actions.addWidget(debug); actions.addStretch(); actions.addWidget(preview); actions.addWidget(save); root.addLayout(actions)
+        self._connect_dirty_signals()
         self.stack.addWidget(self.result_page); self.stack.removeWidget(old); old.deleteLater()
+
+    def _connect_dirty_signals(self) -> None:
+        self.customer_name.textChanged.connect(self._mark_dirty)
+        self.comment_edit.textChanged.connect(self._mark_dirty)
+        self.aggregate_table.cellChanged.connect(self._mark_dirty)
+        self.contract_table.cellChanged.connect(self._mark_dirty)
+        self.rider_table.cellChanged.connect(self._mark_dirty)
+
+    def _mark_dirty(self, *_args) -> None:
+        if self.session:
+            self.session.mark_dirty()
+            self._update_window_title()
+
+    def _update_window_title(self) -> None:
+        suffix = " *" if self.session and self.session.is_dirty else ""
+        self.setWindowTitle(APP_TITLE + suffix)
 
     def _summary_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
@@ -264,6 +314,9 @@ class MainWindow(QMainWindow):
             for p in result.document.pages
         )); layout.addWidget(browser)
         open_button = QPushButton("원본 PDF 열기"); open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.session.source_path))); layout.addWidget(open_button)
+        open_button.setEnabled(self.session.original_pdf_available)
+        if not self.session.original_pdf_available:
+            layout.insertWidget(1, QLabel("원본 PDF 파일을 찾을 수 없습니다. 기존 분석 결과는 계속 사용할 수 있습니다."))
         return widget
 
     def _table(self, headers) -> QTableWidget:
@@ -293,17 +346,17 @@ class MainWindow(QMainWindow):
             self.rider_table.insertRow(row); self._set_row(self.rider_table, row, [item.raw_name, item.category, item.insurer, item.product_name, item.enrolled_amount, cause_label(item.cause_type), payment_label(item.payment_unit), ", ".join(map(str, pages)), confidence])
             for col in range(self.rider_table.columnCount()): self.rider_table.item(row, col).setToolTip(item.raw_text or "")
 
-    def add_aggregate(self): self.session.add_aggregate(); self._fill_aggregates()
-    def add_rider(self): self.session.add_rider(); self._fill_riders()
+    def add_aggregate(self): self.session.add_aggregate(); self._fill_aggregates(); self._mark_dirty()
+    def add_rider(self): self.session.add_rider(); self._fill_riders(); self._mark_dirty()
     def delete_aggregate(self):
         row = self.aggregate_table.currentRow()
         if row >= 0:
             removed = self.session.aggregates.pop(row)
             self.session.raw_aggregate_candidates = [item for item in self.session.raw_aggregate_candidates if item is not removed]
-            self._fill_aggregates()
+            self._fill_aggregates(); self._mark_dirty()
     def delete_rider(self):
         row = self.rider_table.currentRow()
-        if row >= 0: self.session.riders.pop(row); self._fill_riders()
+        if row >= 0: self.session.riders.pop(row); self._fill_riders(); self._mark_dirty()
 
     def _sync_tables(self) -> bool:
         try:
@@ -349,6 +402,127 @@ class MainWindow(QMainWindow):
     def save_debug(self):
         path, _ = QFileDialog.getSaveFileName(self, "Debug JSON 저장", "analysis_debug.json", "JSON (*.json)")
         if path: self.session.result.export_json(path)
+
+    def save_project(self, _checked=False, save_as: bool = False) -> bool:
+        if not self.session:
+            QMessageBox.information(self, "프로젝트 저장", "먼저 PDF를 분석하거나 프로젝트를 열어 주세요.")
+            return False
+        if hasattr(self, "aggregate_table") and not self._sync_tables():
+            return False
+        destination = None if save_as else self.session.project_path
+        if not destination:
+            destination, _ = QFileDialog.getSaveFileName(self, "프로젝트 저장", "치아보험분석.dca", "Dental Coverage Analyzer 프로젝트 (*.dca)")
+        if not destination:
+            return False
+        if not destination.lower().endswith(".dca"):
+            destination += ".dca"
+        try:
+            project = save_project_file(
+                self.session, destination, self.session.project_created_at, backup=True,
+            )
+        except Exception:
+            QMessageBox.warning(self, "저장 실패", "프로젝트를 저장할 수 없습니다.")
+            return False
+        self.session.project_path = str(Path(destination).resolve())
+        self.session.project_created_at = project.created_at
+        self.session.is_dirty = False
+        delete_autosave()
+        remember_project(destination); self._refresh_recent_menu(); self._update_window_title()
+        return True
+
+    def open_project(self, path: str = "") -> None:
+        if not self._confirm_unsaved_changes():
+            return
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, "프로젝트 열기", "", "Dental Coverage Analyzer 프로젝트 (*.dca)")
+        if not path:
+            return
+        if not Path(path).is_file():
+            QMessageBox.warning(self, "프로젝트 열기", "프로젝트 파일을 찾을 수 없습니다.")
+            remove_recent_project(path); self._refresh_recent_menu(); return
+        try:
+            loaded = load_project(path)
+        except FutureProjectVersionError as exc:
+            QMessageBox.warning(self, "프로젝트 열기", str(exc)); return
+        except ProjectError:
+            QMessageBox.warning(self, "프로젝트 열기", "프로젝트 파일을 읽을 수 없습니다."); return
+        self.session = loaded.session
+        self.session.project_path = str(Path(path).resolve())
+        self.session.project_created_at = loaded.project.created_at
+        self.session.is_dirty = False
+        self.path = self.session.source_path
+        self._build_result_page(); self.stack.setCurrentWidget(self.result_page)
+        remember_project(path); self._refresh_recent_menu(); self._update_window_title()
+        if loaded.original_pdf_missing:
+            QMessageBox.information(
+                self, "원본 PDF 없음",
+                "원본 PDF 파일을 찾을 수 없습니다.\n기존 분석 결과는 계속 사용할 수 있습니다.",
+            )
+
+    def _autosave(self) -> None:
+        if not self.session or not self.session.is_dirty:
+            return
+        if hasattr(self, "aggregate_table") and not self._sync_tables():
+            return
+        try:
+            save_project_file(self.session, autosave_path(), self.session.project_created_at, backup=False)
+        except Exception:
+            pass
+
+    def _check_autosave_recovery(self) -> None:
+        path = autosave_path()
+        if not path.is_file():
+            return
+        answer = QMessageBox.question(
+            self, "작업 자동복구",
+            "이전에 저장되지 않은 작업이 있습니다.\n복구하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            try:
+                loaded = load_project(path)
+            except ProjectError:
+                QMessageBox.warning(self, "자동복구", "자동복구 파일을 읽을 수 없습니다.")
+                return
+            self.session = loaded.session; self.session.is_dirty = True
+            self.path = self.session.source_path
+            self._build_result_page(); self.stack.setCurrentWidget(self.result_page); self._update_window_title()
+            if loaded.original_pdf_missing:
+                QMessageBox.information(self, "원본 PDF 없음", "원본 PDF 파일을 찾을 수 없습니다.\n기존 분석 결과는 계속 사용할 수 있습니다.")
+        elif answer == QMessageBox.StandardButton.No:
+            delete_autosave()
+        else:
+            self._deferred_autosave = True
+
+    def _confirm_unsaved_changes(self) -> bool:
+        if not self.session or not self.session.is_dirty:
+            return True
+        answer = QMessageBox.warning(
+            self, "저장하지 않은 변경사항",
+            "저장하지 않은 변경사항이 있습니다.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Save:
+            return self.save_project()
+        if answer == QMessageBox.StandardButton.Discard:
+            delete_autosave(); return True
+        return False
+
+    def start_other_pdf(self) -> None:
+        if not self._confirm_unsaved_changes():
+            return
+        self.session = None; self.path = None
+        self.file_label.setText("선택된 PDF 없음"); self.analyze_button.setEnabled(False)
+        self.stack.setCurrentWidget(self.start_page); self._update_window_title()
+
+    def closeEvent(self, event) -> None:
+        if not self._confirm_unsaved_changes():
+            event.ignore(); return
+        if not self._deferred_autosave:
+            delete_autosave()
+        event.accept()
 
     def _apply_style(self):
         self.setStyleSheet("""
