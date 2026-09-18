@@ -7,6 +7,7 @@ from dental_coverage_analyzer.models import (
     AggregateCoverage, Confidence, CustomerInfo, DentalRider, InsuranceContract,
     ValidationIssue,
 )
+from dental_coverage_analyzer.branding import BrandingSettings
 from dental_coverage_analyzer.core.processing import (
     AggregateValidity, assess_aggregate, normalize_aggregate_values,
     select_canonical_aggregates,
@@ -57,6 +58,7 @@ class ReportData:
     aggregate_warnings: tuple[str, ...] = field(default_factory=tuple)
     validation_issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
     comment: str = ""
+    branding: BrandingSettings = field(default_factory=BrandingSettings)
 
 
 def _first_page(item: AggregateCoverage) -> int:
@@ -120,6 +122,7 @@ def build_report_data(
     riders: list[DentalRider],
     validation_issues: list[ValidationIssue] | None = None,
     comment: str = "",
+    branding: BrandingSettings | None = None,
 ) -> ReportData:
     representatives, warnings = select_representative_aggregates(aggregates)
     dental_contracts = select_dental_report_contracts(contracts, riders)
@@ -143,4 +146,5 @@ def build_report_data(
         aggregate_warnings=(customer_warning,) if warnings else (),
         validation_issues=tuple(validation_issues or ()),
         comment=comment,
+        branding=branding or BrandingSettings(),
     )

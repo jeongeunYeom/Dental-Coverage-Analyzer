@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult, analyze_pdf
+from dental_coverage_analyzer.branding import BrandingSettings
 from dental_coverage_analyzer.core.processing import normalize_aggregate_values
 from dental_coverage_analyzer.models import Confidence
 from dental_coverage_analyzer.reports import (
@@ -27,8 +28,13 @@ from .session import (
 from .project_store import (
     FutureProjectVersionError, ProjectError, autosave_path, delete_autosave,
     load_project, load_recent_projects, remember_project, remove_recent_project,
-    save_project as save_project_file,
+    save_project as save_project_file, app_version,
 )
+from .settings_store import load_settings, save_settings
+from .settings_dialog import BrandingSettingsDialog
+from .evidence import aggregate_evidence, contract_evidence, rider_evidence
+from .evidence_dialog import EvidenceDialog
+from .presentation import confidence_label, issue_label
 
 
 APP_TITLE = "치아보험 보장분석표 생성기"
@@ -74,7 +80,7 @@ class AnalysisThread(QThread):
         self.path = path
 
     def run(self) -> None:
-        stages = {"TEXT_LAYER": "Text Layer 분석 중", "OCR": "OCR 처리 중"}
+        stages = {"TEXT_LAYER": "PDF 내용 읽는 중", "OCR": "스캔 문서 읽는 중"}
         try:
             def callback(current: int, total: int, stage: str) -> None:
                 if stage == "PARSING":
@@ -121,6 +127,7 @@ class MainWindow(QMainWindow):
         self.worker: AnalysisThread | None = None
         self.preview_window: PreviewWindow | None = None
         self._deferred_autosave = False
+        self.branding = load_settings()
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
         self.start_page = self._build_start_page()
@@ -134,6 +141,8 @@ class MainWindow(QMainWindow):
         self.autosave_timer.start()
         self._apply_style()
         QTimer.singleShot(0, self._check_autosave_recovery)
+        if not self.branding.onboarding_completed:
+            QTimer.singleShot(50, self._show_onboarding)
 
     def _setup_project_menu(self) -> None:
         menu = self.menuBar().addMenu("파일")
@@ -143,6 +152,12 @@ class MainWindow(QMainWindow):
         menu.addAction(open_action); menu.addAction(save_action); menu.addAction(save_as_action)
         self.recent_menu = menu.addMenu("최근 프로젝트")
         self._refresh_recent_menu()
+        settings_menu = self.menuBar().addMenu("설정")
+        settings_menu.addAction("보고서/브랜드 설정", self.open_branding_settings)
+        tools = self.menuBar().addMenu("도구"); advanced = tools.addMenu("고급 기능")
+        advanced.addAction("진단 데이터 저장", self.save_debug)
+        help_menu = self.menuBar().addMenu("도움말")
+        help_menu.addAction("사용 방법", self.show_help); help_menu.addAction("프로그램 정보", self.show_about)
 
     def _refresh_recent_menu(self) -> None:
         self.recent_menu.clear()
@@ -155,8 +170,8 @@ class MainWindow(QMainWindow):
 
     def _build_start_page(self) -> QWidget:
         page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(90, 60, 90, 60)
-        title = QLabel(APP_TITLE); title.setObjectName("title")
-        subtitle = QLabel("보험 보장분석 PDF에서 확인 가능한 치아 관련 정보만 로컬에서 정리합니다.")
+        title = QLabel("치아보험 보장분석"); title.setObjectName("title")
+        subtitle = QLabel("보험 보장분석 PDF에서 치아 관련 보장내용을 자동으로 정리하고\n고객용 보고서를 생성합니다.")
         subtitle.setObjectName("subtitle")
         self.drop = DropArea(); self.drop.selected.connect(self.select_pdf)
         self.file_label = QLabel("선택된 PDF 없음"); self.file_label.setObjectName("fileLabel")
@@ -169,6 +184,7 @@ class MainWindow(QMainWindow):
         self.progress_label = QLabel(""); self.progress_label.hide()
         layout.addWidget(title); layout.addWidget(subtitle); layout.addSpacing(25); layout.addWidget(self.drop, 1)
         layout.addWidget(self.file_label); layout.addLayout(buttons); layout.addWidget(self.progress_label); layout.addWidget(self.progress)
+        privacy = QLabel("모든 분석은 이 PC에서 처리됩니다."); privacy.setObjectName("subtitle"); privacy.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(privacy)
         return page
 
     def select_pdf(self, path: str = "") -> None:
@@ -218,11 +234,10 @@ class MainWindow(QMainWindow):
         self.comment_edit.setPlainText(self.session.comment)
         self.comment_edit.setMaximumHeight(100)
         root.addWidget(self.comment_edit)
-        actions = QHBoxLayout(); back = QPushButton("다른 PDF 분석"); back.clicked.connect(self.start_other_pdf)
-        debug = QPushButton("Debug JSON 저장"); debug.clicked.connect(self.save_debug)
+        actions = QHBoxLayout(); back = QPushButton("새 분석"); back.clicked.connect(self.start_other_pdf)
         preview = QPushButton("보고서 미리보기"); preview.clicked.connect(self.preview_report)
         save = QPushButton("PDF 저장"); save.setObjectName("primaryButton"); save.clicked.connect(self.save_report)
-        actions.addWidget(back); actions.addWidget(debug); actions.addStretch(); actions.addWidget(preview); actions.addWidget(save); root.addLayout(actions)
+        actions.addWidget(back); actions.addStretch(); actions.addWidget(preview); actions.addWidget(save); root.addLayout(actions)
         self._connect_dirty_signals()
         self.stack.addWidget(self.result_page); self.stack.removeWidget(old); old.deleteLater()
 
@@ -255,14 +270,16 @@ class MainWindow(QMainWindow):
                 box = QLabel(f"<span style='color:#7B8297'>{label}</span><br><b>{value}</b>"); row.addWidget(box, 1)
             cards_layout.addWidget(card)
         cards_layout.addStretch(); scroll.setWidget(cards); layout.addWidget(scroll, 1)
-        self.aggregate_table = self._table(["담보명", "카테고리", "권장금액(원)", "가입금액(원)", "부족금액(원)", "상태", "출처 페이지", "confidence"])
+        self.aggregate_table = self._table(["담보명", "카테고리", "권장금액(원)", "가입금액(원)", "부족금액(원)", "상태", "출처 페이지", "분석 신뢰도"])
         self._fill_aggregates(); layout.addWidget(self.aggregate_table, 1)
-        layout.addLayout(self._add_delete_buttons("Aggregate 추가", self.add_aggregate, "선택 Aggregate 삭제", self.delete_aggregate))
+        buttons = self._add_delete_buttons("전체 보장 추가", self.add_aggregate, "선택 보장 삭제", self.delete_aggregate)
+        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_aggregate_evidence); buttons.addWidget(evidence)
+        layout.addLayout(buttons)
         return widget
 
     def _contracts_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
-        self.contract_table = self._table(["보험사", "상품명", "가입일", "보험기간", "월보험료(원)", "납입기간", "납입주기", "만기", "출처 페이지", "confidence"])
+        self.contract_table = self._table(["보험사", "상품명", "가입일", "보험기간", "월보험료(원)", "납입기간", "납입주기", "만기", "출처 페이지", "분석 신뢰도"])
         self.dental_contracts = select_dental_report_contracts(self.session.contracts, self.session.riders)
         if not self.dental_contracts:
             empty = QLabel("없음"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -270,34 +287,37 @@ class MainWindow(QMainWindow):
             layout.addWidget(empty)
         for row, item in enumerate(self.dental_contracts):
             self.contract_table.insertRow(row)
-            values = [item.insurer, item.product_name, item.enrollment_date.isoformat() if item.enrollment_date else None, item.coverage_period, item.monthly_premium, item.payment_period, item.payment_cycle, item.maturity, ", ".join(str(s.page) for s in item.sources), {"HIGH":"높음","MEDIUM":"보통","LOW":"낮음"}.get(item.confidence.value, "확인 필요")]
+            values = [item.insurer, item.product_name, item.enrollment_date.isoformat() if item.enrollment_date else None, item.coverage_period, item.monthly_premium, item.payment_period, item.payment_cycle, item.maturity, ", ".join(str(s.page) for s in item.sources), confidence_label(item.confidence)]
             self._set_row(self.contract_table, row, values)
             raw = "\n\n".join(source.raw_text or "" for source in item.sources)
             for col in range(self.contract_table.columnCount()): self.contract_table.item(row, col).setToolTip(raw)
         layout.addWidget(self.contract_table)
+        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_contract_evidence); layout.addWidget(evidence)
         return widget
 
     def _riders_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
-        self.rider_table = self._table(["담보명", "카테고리", "보험사", "상품명", "가입금액(원)", "질병/상해", "지급단위", "출처 페이지", "confidence"])
+        self.rider_table = self._table(["담보명", "카테고리", "보험사", "상품명", "가입금액(원)", "질병/상해", "지급단위", "출처 페이지", "분석 신뢰도"])
         self._fill_riders(); layout.addWidget(self.rider_table)
-        layout.addLayout(self._add_delete_buttons("Rider 추가", self.add_rider, "선택 Rider 삭제", self.delete_rider))
+        buttons = self._add_delete_buttons("세부 담보 추가", self.add_rider, "선택 세부 담보 삭제", self.delete_rider)
+        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_rider_evidence); buttons.addWidget(evidence)
+        layout.addLayout(buttons)
         return widget
 
     def _issues_tab(self) -> QWidget:
         widget = QWidget(); layout = QVBoxLayout(widget)
-        table = self._table(["등급", "코드", "확인할 내용", "페이지"]); table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table = self._table(["등급", "구분", "확인할 내용", "페이지"]); table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         row = 0
         for issue in self.session.result.validation_issues:
             severity = {"INFO":"안내", "WARNING":"주의", "ERROR":"오류"}.get(issue.severity.value, issue.severity.value)
-            table.insertRow(row); self._set_row(table, row, [severity, issue.code, issue.message, ", ".join(map(str, issue.page_numbers))])
+            table.insertRow(row); self._set_row(table, row, [severity, issue_label(issue.code), issue.message, ", ".join(map(str, issue.page_numbers))])
             color = QColor("#FFF1F2" if issue.severity.value == "ERROR" else "#FFF8E6")
             tooltip = "\n".join(issue.raw_values)
             for col in range(table.columnCount()):
                 table.item(row, col).setBackground(color); table.item(row, col).setToolTip(tooltip)
             row += 1
         for warning in self.session.aggregate_conflict_warnings:
-            table.insertRow(row); self._set_row(table, row, ["주의", "AGGREGATE_CANONICAL_CONFLICT", warning, "상세 문구 참조"])
+            table.insertRow(row); self._set_row(table, row, ["주의", "보장정보 확인 필요", warning, "상세 문구 참조"])
             for col in range(table.columnCount()): table.item(row, col).setBackground(QColor("#FFF8E6"))
             row += 1
         layout.addWidget(table); return widget
@@ -333,7 +353,7 @@ class MainWindow(QMainWindow):
         self.aggregate_table.setRowCount(0)
         for row, item in enumerate(self.session.aggregates):
             normalized = normalize_aggregate_values(item)
-            confidence = {"HIGH":"높음","MEDIUM":"보통","LOW":"낮음"}.get(item.confidence.value, "확인 필요")
+            confidence = confidence_label(item.confidence)
             self.aggregate_table.insertRow(row); self._set_row(self.aggregate_table, row, [item.raw_name, item.category, item.recommended_amount, item.enrolled_amount, normalized.shortage, normalized.status, ", ".join(map(str, item.source_pages)), confidence])
             raw = item.representative_source.raw_text if item.representative_source else ""
             for col in range(self.aggregate_table.columnCount()): self.aggregate_table.item(row, col).setToolTip(raw or "")
@@ -342,7 +362,7 @@ class MainWindow(QMainWindow):
         self.rider_table.setRowCount(0)
         for row, item in enumerate(self.session.riders):
             pages = sorted({source.page for source in item.sources} | ({item.source.page} if item.source else set()))
-            confidence = {"HIGH": "높음", "MEDIUM": "보통", "LOW": "낮음"}.get(item.confidence.value, "확인 필요")
+            confidence = confidence_label(item.confidence)
             self.rider_table.insertRow(row); self._set_row(self.rider_table, row, [item.raw_name, item.category, item.insurer, item.product_name, item.enrolled_amount, cause_label(item.cause_type), payment_label(item.payment_unit), ", ".join(map(str, pages)), confidence])
             for col in range(self.rider_table.columnCount()): self.rider_table.item(row, col).setToolTip(item.raw_text or "")
 
@@ -385,6 +405,7 @@ class MainWindow(QMainWindow):
             self.session.riders,
             self.session.result.validation_issues if self.session.result else [],
             self.session.comment,
+            self.branding,
         )
 
     def preview_report(self):
@@ -400,8 +421,50 @@ class MainWindow(QMainWindow):
             except Exception as exc: QMessageBox.warning(self, "저장 실패", f"PDF 저장 중 오류가 발생했습니다.\n{exc}")
 
     def save_debug(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Debug JSON 저장", "analysis_debug.json", "JSON (*.json)")
+        if not self.session: return
+        answer = QMessageBox.warning(self, "진단 데이터 저장", "진단 데이터에는 분석된 보험 정보가 포함될 수 있습니다.\n외부에 전달하기 전에 내용을 확인해 주세요.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        if answer != QMessageBox.StandardButton.Ok: return
+        path, _ = QFileDialog.getSaveFileName(self, "진단 데이터 저장", "analysis_diagnostic.json", "JSON (*.json)")
         if path: self.session.result.export_json(path)
+
+    def open_branding_settings(self) -> None:
+        dialog = BrandingSettingsDialog(self.branding, self)
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            self.branding = dialog.settings
+            try: save_settings(self.branding)
+            except OSError: QMessageBox.warning(self, "설정 저장", "설정을 저장할 수 없습니다."); return
+            self._apply_style()
+
+    def _show_evidence(self, evidence) -> None:
+        if self.session:
+            EvidenceDialog(evidence, self.session.source_path, self.session.original_pdf_available, self).exec()
+
+    def show_aggregate_evidence(self) -> None:
+        row = self.aggregate_table.currentRow()
+        if row < 0: QMessageBox.information(self, "원본 근거 보기", "확인할 전체 보장을 선택해 주세요."); return
+        self._show_evidence(aggregate_evidence(self.session.aggregates[row]))
+
+    def show_contract_evidence(self) -> None:
+        row = self.contract_table.currentRow()
+        if row < 0: QMessageBox.information(self, "원본 근거 보기", "확인할 보험상품을 선택해 주세요."); return
+        self._show_evidence(contract_evidence(self.dental_contracts[row]))
+
+    def show_rider_evidence(self) -> None:
+        row = self.rider_table.currentRow()
+        if row < 0: QMessageBox.information(self, "원본 근거 보기", "확인할 세부 담보를 선택해 주세요."); return
+        self._show_evidence(rider_evidence(self.session.riders[row]))
+
+    def _show_onboarding(self) -> None:
+        QMessageBox.information(self, APP_TITLE, "1. 보험 보장분석 PDF 선택\n2. 분석 결과 확인 및 수정\n3. 상담 코멘트 작성\n4. PDF 보고서 저장\n\n모든 분석은 이 PC에서 처리됩니다.")
+        self.branding.onboarding_completed = True
+        try: save_settings(self.branding)
+        except OSError: pass
+
+    def show_help(self) -> None:
+        QMessageBox.information(self, "사용 방법", "PDF를 선택해 분석한 뒤 결과를 확인·수정하세요.\nCtrl+S로 프로젝트를 저장하고, 미리보기 확인 후 PDF 보고서를 저장할 수 있습니다.")
+
+    def show_about(self) -> None:
+        QMessageBox.about(self, "프로그램 정보", f"{APP_TITLE}\n버전 {app_version()}\n\n보험 보장분석 자료의 치아 보장내용을 정리하는 로컬 프로그램입니다.\n모든 분석은 로컬에서 처리됩니다.")
 
     def save_project(self, _checked=False, save_as: bool = False) -> bool:
         if not self.session:
@@ -530,15 +593,15 @@ class MainWindow(QMainWindow):
         #title { font-size:30px; font-weight:800; color:#252943; } #subtitle,#fileLabel { color:#737A91; }
         #dropArea { background:white; border:2px dashed #B7B5FA; border-radius:18px; min-height:280px; }
         QPushButton { background:white; border:1px solid #DADDEA; border-radius:9px; padding:10px 18px; font-weight:600; }
-        QPushButton:hover { border-color:#625EF5; } #primaryButton { background:#625EF5; color:white; border:none; }
+        QPushButton:hover { border-color:PRIMARY; } #primaryButton { background:PRIMARY; color:white; border:none; }
         #sectionTitle { font-size:24px; font-weight:800; } #card { background:white; border:1px solid #E6E7EF; border-radius:14px; padding:8px; }
         QTabWidget::pane { border:1px solid #E2E4EE; background:white; border-radius:10px; }
-        QTabBar::tab { padding:11px 18px; } QTabBar::tab:selected { color:#625EF5; font-weight:700; }
+        QTabBar::tab { padding:11px 18px; } QTabBar::tab:selected { color:PRIMARY; font-weight:700; }
         QTableWidget { background:white; border:0; gridline-color:#ECEEF4; } QHeaderView::section { background:#F0F1F7; padding:8px; border:0; font-weight:700; }
         QLineEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
         QTextEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
         QProgressBar { border:0; border-radius:6px; background:#E6E7F0; height:12px; } QProgressBar::chunk { border-radius:6px; background:#625EF5; }
-        """)
+        """.replace("PRIMARY", self.branding.primary_color))
 
 
 def run_gui() -> int:

@@ -60,7 +60,7 @@ class LoadedProject:
     original_pdf_missing: bool
 
 
-def _app_version() -> str:
+def app_version() -> str:
     try:
         return version("dental-coverage-analyzer")
     except PackageNotFoundError:
@@ -212,7 +212,7 @@ def project_from_session(session: AnalysisSession, created_at: str | None = None
     result = session.result
     document = result.document if result else None
     return ProjectData(
-        SCHEMA_VERSION, _app_version(), created_at or now, now, session.source_path,
+        SCHEMA_VERSION, app_version(), created_at or now, now, session.source_path,
         {
             "name": session.customer.name, "masked_name": session.customer.masked_name,
             "age": session.customer.age, "gender": session.customer.gender,

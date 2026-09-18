@@ -207,3 +207,12 @@ PySide6 PrintSupport를 포함하고, GitHub Actions의 `windows-latest`가 Pyth
 빌드, ZIP 생성 후 `DentalCoverageAnalyzer-Windows` artifact를 업로드한다. Tesseract가
 없어도 EXE와 수동 보정 workflow는 동작하며 binary/traineddata bundle은 후속 배포 개선
 범위다.
+
+## 사용자 브랜딩과 Evidence View
+
+- `branding.BrandingSettings`는 파서 및 고객 프로젝트 모델과 분리된 사용자 전역 설정이다.
+- `ui.settings_store`는 `%LOCALAPPDATA%/DentalCoverageAnalyzer/settings.json`에 schema version과 함께 atomic write하며, 손상된 설정은 안전하게 기본값으로 복구한다.
+- 로고는 검증 후 로컬 `branding/` 폴더로 복사한다. `ReportData.branding`을 통해 같은 설정이 HTML 미리보기와 QPainter PDF에 전달된다.
+- `ui.evidence`는 Aggregate, Contract, Rider의 `SourceReference`를 사용자용 페이지/원문/신뢰도 데이터로 변환하고, `EvidenceDialog`가 원본 PDF 존재 여부에 따라 열기 기능을 제어한다.
+- 첫 실행 안내 완료 여부도 전역 설정에 저장되며 고객 프로젝트의 dirty state에는 영향을 주지 않는다.
+- 진단 JSON과 내부 code는 고급 기능에 남기되 일반 화면에서는 한국어 업무 용어와 친화적인 확인 항목명을 표시한다.

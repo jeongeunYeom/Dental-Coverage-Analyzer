@@ -110,9 +110,20 @@ def _draw_page(p, canvas, data, plan, page_no, page_count, is_last, Qt, QColor, 
 
     y = 72 * scale
     if plan.kind == "summary":
+        primary = QColor(data.branding.primary_color)
         header = QRectF(margin, y, content.width(), 190 * scale)
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#EFEEFF")); p.drawRoundedRect(header, 28 * scale, 28 * scale)
-        draw_label(QRectF(header.left() + 34 * scale, header.top() + 22 * scale, header.width() - 68 * scale, 28 * scale), "DENTAL COVERAGE ANALYSIS", 9, QColor("#625EF5"), QFont.Weight.Bold)
+        draw_label(QRectF(header.left() + 34 * scale, header.top() + 22 * scale, header.width() - 68 * scale, 28 * scale), "DENTAL COVERAGE ANALYSIS", 9, primary, QFont.Weight.Bold)
+        if data.branding.company_name:
+            draw_label(QRectF(header.right() - 320 * scale, header.top() + 20 * scale, 280 * scale, 30 * scale), data.branding.company_name, 10, primary, QFont.Weight.Bold, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if data.branding.logo_path and Path(data.branding.logo_path).is_file():
+            from PySide6.QtGui import QImage
+            logo = QImage(data.branding.logo_path)
+            if not logo.isNull():
+                box = QRectF(header.right() - 160 * scale, header.top() + 55 * scale, 115 * scale, 55 * scale)
+                scaled = logo.scaled(int(box.width()), int(box.height()), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                target = QRectF(box.right() - scaled.width(), box.top() + (box.height() - scaled.height()) / 2, scaled.width(), scaled.height())
+                p.drawImage(target, scaled)
         draw_label(QRectF(header.left() + 34 * scale, header.top() + 53 * scale, header.width() - 68 * scale, 62 * scale), "치아보험 보장분석표", 25, text, QFont.Weight.Bold)
         meta = f"고객명  {data.customer_name}     ·     분석일  {data.analysis_date.isoformat()}"
         draw_label(QRectF(header.left() + 34 * scale, header.bottom() - 54 * scale, header.width() - 68 * scale, 30 * scale), meta, 10, secondary)
@@ -164,6 +175,16 @@ def _draw_page(p, canvas, data, plan, page_no, page_count, is_last, Qt, QColor, 
         draw_label(QRectF(comment_rect.left() + 24 * scale, comment_rect.top() + 48 * scale, comment_rect.width() - 48 * scale, comment_rect.height() - 62 * scale), plan.comment, 10, text, flags=flags)
 
     if is_last:
+        contact = " · ".join(filter(None, (
+            data.branding.company_name,
+            f"담당자 {data.branding.consultant_name}" if data.branding.consultant_name else "",
+            data.branding.phone, data.branding.email,
+        )))
+        if contact or data.branding.footer_text.strip():
+            brand_box = QRectF(margin, canvas.height() - 275 * scale, content.width(), 68 * scale)
+            p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#F1F0FF")); p.drawRoundedRect(brand_box, 12 * scale, 12 * scale)
+            lines = "\n".join(value for value in (contact, data.branding.footer_text.strip()) if value)
+            draw_label(brand_box.adjusted(18 * scale, 8 * scale, -18 * scale, -8 * scale), lines, 8.5, QColor(data.branding.primary_color), QFont.Weight.Bold, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap)
         box = QRectF(margin, canvas.height() - 190 * scale, content.width(), 105 * scale)
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#EEF0F5")); p.drawRoundedRect(box, 12 * scale, 12 * scale)
         disclaimer = DISCLAIMER + " 서로 다른 지급단위의 세부 담보는 단순 합산하지 않았습니다."

@@ -82,8 +82,14 @@ def _riders(items) -> str:
 def render_report_html(data: ReportData) -> str:
     template = load_text_resource("report/template.html")
     css = load_text_resource("report/report.css")
+    brand = data.branding
+    primary = escape(brand.primary_color, quote=True)
+    logo = ""
+    if brand.logo_path and Path(brand.logo_path).is_file():
+        logo = f'<img class="brand-logo" src="{escape(Path(brand.logo_path).resolve().as_uri(), quote=True)}">'
+    company = f'<div class="brand-name">{escape(brand.company_name)}</div>' if brand.company_name else ""
     hero = (
-        '<div class="hero"><div class="eyebrow">DENTAL COVERAGE ANALYSIS</div>'
+        f'<div class="hero" style="border-top:5px solid {primary}">{logo}{company}<div class="eyebrow" style="color:{primary}">DENTAL COVERAGE ANALYSIS</div>'
         '<h1>치아보험 보장분석표</h1>'
         f'<div class="meta"><b>고객명</b>&nbsp; {escape(data.customer_name)} &nbsp;&nbsp;·&nbsp;&nbsp; '
         f'<b>분석일</b>&nbsp; {data.analysis_date.isoformat()}</div></div>'
@@ -101,6 +107,15 @@ def render_report_html(data: ReportData) -> str:
     if data.riders:
         body.append(f'<div class="page-break"></div><section class="page"><h1>세부 치아보장</h1><p class="secondary">지급조건과 지급단위가 다른 담보는 합산하지 않았습니다.</p>{_riders(data.riders)}</section>')
     body.append(_comment(data.comment))
+    contacts = " · ".join(filter(None, (
+        brand.company_name, f"담당자 {brand.consultant_name}" if brand.consultant_name else "",
+        brand.phone, brand.email,
+    )))
+    if contacts:
+        body.append(f'<div class="brand-contact" style="border-left:4px solid {primary}">{escape(contacts)}</div>')
+    if brand.footer_text.strip():
+        footer = escape(brand.footer_text).replace("\n", "<br>")
+        body.append(f'<div class="brand-footer">{footer}</div>')
     body.append(f'<div class="disclaimer">{escape(DISCLAIMER)}<br><b>서로 다른 지급단위의 세부 담보는 단순 합산하지 않았습니다.</b></div>')
     return template.replace("{{CSS}}", css).replace("{{BODY}}", "".join(body))
 
