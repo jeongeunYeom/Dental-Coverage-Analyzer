@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dental-coverage-analyzer"
+version = "0.1.0"
+description = "로컬 전용 치아보험 보장분석 도구"
+requires-python = ">=3.11"
+dependencies = ["PyMuPDF>=1.24", "PySide6>=6.7"]
+
+[project.scripts]
+dental-coverage-analyzer = "dental_coverage_analyzer.__main__:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+build = ["pytest>=8.0", "pytest-timeout>=2.3", "PyInstaller>=6.10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.package-data]
+"dental_coverage_analyzer.resources.config" = ["*.json"]
+"dental_coverage_analyzer.resources" = ["tesseract/**/*", "report/*.html", "report/*.css"]

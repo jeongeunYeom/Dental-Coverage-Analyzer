@@ -1,0 +1,18 @@
+{
+  "MERITZ": {
+    "positive_keywords": {"메리츠화재": 6, "간편보장분석": 3, "담보별 진단현황": 2},
+    "minimum_score": 5
+  },
+  "SAMSUNG": {
+    "positive_keywords": {"삼성화재": 6, "상품별 상세 현황": 2, "신용정보원 담보 이름": 2},
+    "minimum_score": 5
+  },
+  "LOTTE": {
+    "positive_keywords": {"롯데손해보험": 6, "한장 보장 현황": 2, "세부 가입 현황": 2},
+    "minimum_score": 5
+  },
+  "GENERIC": {
+    "positive_keywords": {"보험회사": 1, "상품명": 1, "가입금액": 1, "보장분석": 1},
+    "minimum_score": 2
+  }
+}
