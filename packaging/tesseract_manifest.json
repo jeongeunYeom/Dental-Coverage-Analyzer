@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "windows_binary": {
+    "package_id": "tesseract",
+    "version": "5.3.3.20231005",
+    "download_url": "https://community.chocolatey.org/api/v2/package/tesseract/5.3.3.20231005",
+    "sha256": "CHOCOLATEY_PACKAGE_METADATA",
+    "checksum_policy": "Chocolatey --require-checksums rejects missing or mismatched upstream SHA-256 metadata"
+  },
+  "traineddata": {
+    "repository": "https://github.com/tesseract-ocr/tessdata_fast.git",
+    "git_ref": "4.1.0",
+    "eng": {
+      "path": "eng.traineddata",
+      "download_url": "https://github.com/tesseract-ocr/tessdata_fast/blob/4.1.0/eng.traineddata",
+      "sha256": "COMPUTED_AND_LOGGED_DURING_BUILD"
+    },
+    "kor": {
+      "path": "kor.traineddata",
+      "download_url": "https://github.com/tesseract-ocr/tessdata_fast/blob/4.1.0/kor.traineddata",
+      "sha256": "COMPUTED_AND_LOGGED_DURING_BUILD"
+    }
+  },
+  "license_source": {
+    "repository": "https://github.com/tesseract-ocr/tesseract.git",
+    "git_ref": "5.3.3"
+  }
+}

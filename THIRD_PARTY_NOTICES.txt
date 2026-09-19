@@ -1,0 +1,15 @@
+Dental Coverage Analyzer bundles Tesseract OCR and the eng/kor tessdata_fast
+language models in Windows release artifacts.
+
+Tesseract OCR
+Copyright 2006 Google Inc. and other contributors
+License: Apache License 2.0
+Source: https://github.com/tesseract-ocr/tesseract
+
+tessdata_fast
+Copyright the Tesseract OCR contributors
+License: Apache License 2.0
+Source: https://github.com/tesseract-ocr/tessdata_fast
+
+The corresponding upstream license texts are copied into the release under
+tesseract/licenses by scripts/prepare_tesseract_windows.ps1.
