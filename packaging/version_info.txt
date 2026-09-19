@@ -1,0 +1,15 @@
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers=(0, 1, 0, 0), prodvers=(0, 1, 0, 0), mask=0x3f, flags=0x0,
+    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[StringFileInfo([StringTable('041204B0', [
+    StringStruct('FileDescription', '치아보험 보장분석표 생성기'),
+    StringStruct('CompanyName', 'Independent Software Publisher'),
+    StringStruct('FileVersion', '0.1.0'),
+    StringStruct('InternalName', 'DentalCoverageAnalyzer'),
+    StringStruct('OriginalFilename', 'DentalCoverageAnalyzer.exe'),
+    StringStruct('ProductName', 'Dental Coverage Analyzer'),
+    StringStruct('ProductVersion', '0.1.0'),
+    StringStruct('LegalCopyright', 'Copyright (c) 2026. All rights reserved.')
+  ])]), VarFileInfo([VarStruct('Translation', [1042, 1200])])]
+)
