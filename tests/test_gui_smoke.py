@@ -123,6 +123,41 @@ def test_gui_window_can_process_events_without_modal_startup(monkeypatch):
     window.close()
 
 
+def test_app_theme_is_independent_from_report_branding_and_keeps_core_controls(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6", reason="PySide6가 필요한 GUI theme regression test")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PySide6.QtWidgets import QApplication, QPushButton
+        import dental_coverage_analyzer.ui.app as app_module
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
+    from dental_coverage_analyzer.branding import BrandingSettings
+    from dental_coverage_analyzer.core.pdf.analyzer import PDFAnalysisResult
+    from dental_coverage_analyzer.models import PDFDocumentData
+    from dental_coverage_analyzer.ui.session import AnalysisSession
+    from dental_coverage_analyzer.ui.theme import APP_UI_PRIMARY
+
+    qt_app = QApplication.instance() or QApplication([])
+    document = PDFDocumentData(tmp_path / "synthetic.pdf", "synthetic.pdf", 0, {}, False, [])
+    result = PDFAnalysisResult(document, {}, [], {}, [], [], [])
+    window = app_module.MainWindow(enable_startup_prompts=False)
+    window.session = AnalysisSession.from_result("synthetic.pdf", result)
+    window._build_result_page()
+
+    monkeypatch.setattr(app_module, "save_settings", lambda settings: tmp_path / "settings.json")
+    window._apply_branding_settings(BrandingSettings(primary_color="#FF00AA"))
+
+    assert APP_UI_PRIMARY in window.styleSheet()
+    assert "#FF00AA" not in window.styleSheet()
+    assert window.tabs.count() == 5
+    assert window.findChild(QPushButton, "primaryButton") is not None
+    assert any(button.property("buttonRole") == "danger" for button in window.findChildren(QPushButton))
+    assert any(button.property("buttonRole") == "outlinePrimary" for button in window.findChildren(QPushButton))
+    window.session.is_dirty = False
+    window.close()
+    del qt_app
+
+
 def test_close_requests_running_analysis_interruption(monkeypatch):
     pytest.importorskip("PySide6", reason="PySide6가 필요한 GUI thread regression test")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")

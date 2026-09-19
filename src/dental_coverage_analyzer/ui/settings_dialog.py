@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
+    QGroupBox, QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
 )
 
 from dental_coverage_analyzer.branding import BrandingSettings
@@ -19,7 +19,9 @@ class BrandingSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("보고서/브랜드 설정"); self.resize(620, 650)
         self._logo_path = settings.logo_path
-        root = QVBoxLayout(self); form = QFormLayout()
+        root = QVBoxLayout(self); root.setContentsMargins(20, 18, 20, 18); root.setSpacing(12)
+        company_group = QGroupBox("회사 정보"); company_form = QFormLayout(company_group)
+        design_group = QGroupBox("보고서 디자인"); design_form = QFormLayout(design_group)
         self.company = QLineEdit(settings.company_name); self.consultant = QLineEdit(settings.consultant_name)
         self.phone = QLineEdit(settings.phone); self.email = QLineEdit(settings.email)
         self.footer = QTextEdit(settings.footer_text); self.footer.setMaximumHeight(80)
@@ -29,14 +31,17 @@ class BrandingSettingsDialog(QDialog):
         logo_button = QPushButton("PNG/JPG 선택"); logo_button.clicked.connect(self._choose_logo)
         self.logo_name = QLabel(Path(self._logo_path).name if self._logo_path else "선택 안 함")
         logo_row = QHBoxLayout(); logo_row.addWidget(self.logo_name, 1); logo_row.addWidget(logo_button)
-        form.addRow("회사명 또는 브랜드명", self.company); form.addRow("담당자명", self.consultant)
-        form.addRow("연락처", self.phone); form.addRow("이메일", self.email)
-        form.addRow("로고 이미지", logo_row); form.addRow("보고서 하단 안내문", self.footer)
-        form.addRow("대표 색상", color_row); root.addLayout(form)
+        company_form.addRow("회사명", self.company); company_form.addRow("담당자", self.consultant)
+        company_form.addRow("연락처", self.phone); company_form.addRow("이메일", self.email)
+        design_form.addRow("로고", logo_row); design_form.addRow("대표색", color_row)
+        design_form.addRow("하단 문구", self.footer)
+        root.addWidget(company_group); root.addWidget(design_group)
         root.addWidget(QLabel("미리보기")); self.preview = QLabel(); self.preview.setMinimumHeight(130)
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview.setObjectName("brandPreview"); root.addWidget(self.preview)
         for edit in (self.company, self.consultant, self.phone, self.email, self.color): edit.textChanged.connect(self._update_preview)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        save_button = buttons.button(QDialogButtonBox.StandardButton.Save); save_button.setText("저장"); save_button.setObjectName("primaryButton"); save_button.setProperty("buttonRole", "primary")
+        cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel); cancel_button.setText("취소"); cancel_button.setProperty("buttonRole", "secondary")
         buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); root.addWidget(buttons)
         self._update_preview()
 
