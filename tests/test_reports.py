@@ -9,7 +9,7 @@ from dental_coverage_analyzer.models import (
 )
 from dental_coverage_analyzer.branding import BrandingSettings
 from dental_coverage_analyzer.reports import (
-    DISCLAIMER, build_report_data, export_report_pdf, plan_report_pages, render_report_html,
+    DISCLAIMER, ReportData, build_report_data, export_report_pdf, plan_report_pages, render_report_html,
     select_representative_aggregates,
 )
 
@@ -61,7 +61,8 @@ def test_manual_edits_are_reflected_when_report_data_is_rebuilt():
 def test_html_report_contains_cards_colors_disclaimer_and_no_rider_total():
     html = render_report_html(build_report_data(*sample_data()))
     assert "치아보험 보장분석표" in html
-    assert "#625EF5" in html and "#43B7E8" in html
+    assert "#234A75" in html and "#4F7CAC" in html and "#2E8B57" in html
+    assert "kpi-card" in html and "보완 추천" in html and "status-badge" in html
     assert "25%" in html
     assert "컴퍼짓레진" in html and "90,000원" in html
     assert DISCLAIMER in html
@@ -192,7 +193,30 @@ def test_comment_is_preserved_escaped_and_omitted_when_blank():
     assert "<script>alert(1)</script>" not in html
 
     blank = render_report_html(build_report_data(*sample_data(), comment="  \n"))
-    assert "상담 코멘트" not in blank
+    assert "상담 코멘트가 없습니다" in blank
+
+
+def test_html_report_renders_professional_empty_states_and_issue_badges():
+    issue = ValidationIssue("OCR_REVIEW", ValidationSeverity.WARNING, "숫자 판독 확인 필요", [6])
+    data = build_report_data(CustomerInfo(), [], [], [], [issue])
+    html = render_report_html(data)
+    assert "가입된 치아보험이 없습니다" in html
+    assert "세부 치아담보가 없습니다" in html
+    assert "확인 필요 항목" in html
+    assert "주의" in html and "숫자 판독 확인 필요" in html and "원본 6페이지" in html
+
+
+def test_report_branding_color_affects_report_not_default_theme():
+    default_html = render_report_html(ReportData("가명고객", date(2026, 9, 18)))
+    assert "#234A75" in default_html
+    assert "#625EF5" not in default_html
+
+    branded_html = render_report_html(ReportData(
+        "가명고객", date(2026, 9, 18),
+        branding=BrandingSettings(company_name="가상 컨설팅", primary_color="#C13584"),
+    ))
+    assert "#C13584" in branded_html
+    assert "가상 컨설팅" in branded_html
 
 
 def test_no_dental_contract_renders_only_none_not_general_products():

@@ -1,34 +1,196 @@
-@page { size:A4 portrait; margin:18mm; }
-body { font-family:"Malgun Gothic","맑은 고딕",sans-serif; color:#252A3D; background:#F7F8FC; font-size:10pt; line-height:1.45; }
-.page { padding:7mm; background:#F7F8FC; }
-.hero { background:#EFEEFF; border-radius:18px; padding:10mm; margin-bottom:9mm; }
-.eyebrow { color:#625EF5; font-size:9pt; font-weight:700; letter-spacing:1px; }
-h1 { font-size:25pt; margin:2mm 0 5mm; } h2 { font-size:17pt; margin:7mm 0 4mm; }
-.meta,.secondary { color:#858CA0; }
-.grid { width:100%; border-collapse:separate; border-spacing:4mm; }
-.summary-card,.contract-card,.rider-row { background:#FFF; border-radius:15px; padding:6mm; }
-.summary-card { width:50%; vertical-align:top; }
-.badge { color:#FFF; border-radius:10px; padding:1mm 3mm; font-size:8.5pt; font-weight:700; }
-.coverage-name { font-size:13pt; font-weight:700; margin:4mm 0; }
-.main-amount { font-size:18pt; font-weight:800; margin-top:4mm; }
-.amount-label { color:#858CA0; font-size:9pt; }
-.sub-amount { margin-top:3mm; color:#596075; }
-.ratio { font-size:15pt; font-weight:800; margin-top:4mm; }
-.progress { height:6px; background:#E8EAF2; border-radius:3px; margin:2mm 0; }
-.progress-fill { height:6px; border-radius:3px; }
-.warning { background:#FFF7E8; color:#8B641F; border-radius:12px; padding:4mm; margin:4mm 0; font-size:9pt; }
-.contract-card { margin:3mm 0; border-left:4px solid #625EF5; }
-.product-name { font-size:14pt; font-weight:700; margin:2mm 0; }
-.category-title { color:#FFF; border-radius:10px; padding:3mm 4mm; font-size:12pt; font-weight:700; margin-top:5mm; }
-.rider-row { margin:2mm 0; width:100%; }
-.rider-name { font-size:11.5pt; font-weight:700; } .rider-amount { text-align:right; font-size:14pt; font-weight:700; }
-.disclaimer { background:#EEF0F5; color:#757C90; border-radius:10px; padding:4mm; margin-top:9mm; font-size:8.5pt; }
-.empty-contracts { background:#FFF; border-radius:15px; padding:6mm; color:#252A3D; font-size:14pt; font-weight:700; }
-.comment-card { background:#F1F0FF; border-radius:15px; padding:6mm; margin-top:7mm; page-break-inside:avoid; }
-.comment-card h2 { color:#625EF5; margin:0 0 3mm; font-size:14pt; }
-.comment-text { white-space:pre-wrap; color:#252A3D; font-size:10pt; line-height:1.55; }
-.brand-logo { max-width:120px; max-height:52px; float:right; }
-.brand-name { float:right; clear:right; font-weight:700; color:#596075; }
-.brand-contact,.brand-footer { margin-top:4mm; padding:4mm 5mm; background:#F4F3FF; border-radius:10px; }
-.brand-footer { background:#F7F8FC; color:#596075; }
+@page { size:A4 portrait; margin:16mm; }
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  font-family:"Malgun Gothic","Segoe UI","맑은 고딕",sans-serif;
+  color:#1F2937;
+  background:#F7F9FC;
+  font-size:10pt;
+  line-height:1.48;
+}
+.page { padding:0; background:#F7F9FC; }
+.hero {
+  position:relative;
+  min-height:44mm;
+  background:#FFFFFF;
+  border-top:5px solid #234A75;
+  border-radius:14px;
+  padding:9mm 10mm;
+  margin-bottom:6mm;
+  border-left:1px solid #D9E2EC;
+  border-right:1px solid #D9E2EC;
+  border-bottom:1px solid #D9E2EC;
+}
+.eyebrow { font-size:8.5pt; font-weight:700; letter-spacing:.7px; }
+h1 { font-size:24pt; line-height:1.15; margin:2mm 0 2mm; color:#172033; }
+h2 { font-size:16pt; margin:7mm 0 3.5mm; color:#172033; }
+h3 { font-size:11pt; margin:0 0 2mm; color:#172033; }
+.hero p { margin:0 0 4mm; color:#667085; font-size:10.5pt; }
+.meta,.secondary,.brand-line { color:#667085; }
+.meta span { color:#D0D5DD; padding:0 2mm; }
+.brand-logo { max-width:118px; max-height:50px; float:right; margin-left:6mm; }
+.brand-name { float:right; clear:right; font-weight:700; color:#234A75; margin-top:2mm; }
+.brand-line { margin-top:2mm; }
+.kpi-grid {
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:3mm;
+  margin-bottom:6mm;
+}
+.kpi-card {
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-radius:12px;
+  padding:4mm;
+  min-height:28mm;
+}
+.kpi-label,.kpi-caption { color:#667085; font-size:8.5pt; }
+.kpi-value { font-size:19pt; font-weight:800; color:#234A75; margin:1mm 0; }
+.insight-panel {
+  display:grid;
+  grid-template-columns:1.15fr 1fr 1fr;
+  gap:3mm;
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-radius:12px;
+  padding:5mm;
+  page-break-inside:avoid;
+}
+.insight-column { border-left:3px solid #DCEAF7; padding-left:3mm; }
+.insight-column:first-child { border-left-color:#F59E0B; }
+.insight-column ul { margin:0; padding-left:4mm; color:#475467; }
+.insight-column li { margin:1.2mm 0; }
+.summary-grid {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:4mm;
+}
+.summary-card {
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-radius:13px;
+  padding:5mm;
+  page-break-inside:avoid;
+}
+.card-head { display:flex; justify-content:space-between; align-items:center; gap:3mm; }
+.category-chip {
+  color:#FFFFFF;
+  border-radius:99px;
+  padding:1.3mm 3mm;
+  font-size:8.5pt;
+  font-weight:700;
+}
+.status-badge {
+  border-radius:99px;
+  padding:1.2mm 3mm;
+  font-size:8.5pt;
+  font-weight:700;
+  white-space:nowrap;
+}
+.coverage-name { font-size:13pt; font-weight:700; margin:4mm 0; color:#172033; }
+.metrics {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:3mm;
+  margin-bottom:3mm;
+}
+.metrics span { display:block; color:#667085; font-size:8.5pt; }
+.metrics b { display:block; color:#172033; font-size:12pt; margin-top:.5mm; }
+.progress { height:7px; background:#EEF2F6; border-radius:4px; margin:3mm 0 2mm; }
+.progress-fill { height:7px; border-radius:4px; }
+.source-note { color:#667085; font-size:8.5pt; }
+.contract-card {
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-left:4px solid #4F7CAC;
+  border-radius:12px;
+  padding:4mm 5mm;
+  margin:3mm 0;
+  page-break-inside:avoid;
+}
+.contract-insurer { color:#234A75; font-size:9pt; font-weight:700; }
+.product-name { font-size:13pt; font-weight:700; margin:1.5mm 0 3mm; color:#172033; }
+.contract-meta { display:flex; gap:7mm; color:#667085; }
+.rider-group { page-break-inside:avoid; margin:5mm 0; }
+.category-title {
+  border-left:5px solid #4F7CAC;
+  color:#172033;
+  background:#FFFFFF;
+  border-radius:10px 10px 0 0;
+  padding:3mm 4mm;
+  font-size:12pt;
+  font-weight:800;
+  border-top:1px solid #D9E2EC;
+  border-right:1px solid #D9E2EC;
+}
+.rider-table { width:100%; border-collapse:collapse; background:#FFFFFF; border:1px solid #D9E2EC; }
+.rider-table th {
+  background:#F8FAFC;
+  color:#475467;
+  text-align:left;
+  font-weight:700;
+  padding:3mm;
+  border-bottom:1px solid #D9E2EC;
+}
+.rider-table td { padding:3mm; border-bottom:1px solid #EEF2F6; vertical-align:top; }
+.rider-table tr:nth-child(even) td { background:#FCFCFD; }
+.rider-table td span { display:block; color:#667085; font-size:8.5pt; margin-top:.8mm; }
+.rider-table .amount { text-align:right; font-weight:800; color:#172033; white-space:nowrap; }
+.issue-list {
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-radius:12px;
+  padding:4mm 5mm;
+  margin:0;
+  list-style:none;
+}
+.issue-list li { margin:2mm 0; color:#475467; }
+.issue-list span {
+  display:inline-block;
+  border-radius:99px;
+  padding:1mm 2.5mm;
+  font-weight:700;
+  margin-right:2mm;
+}
+.empty-state {
+  background:#FFFFFF;
+  border:1px dashed #D9E2EC;
+  border-radius:12px;
+  padding:5mm;
+  color:#667085;
+  page-break-inside:avoid;
+}
+.empty-title { color:#172033; font-weight:800; font-size:12pt; margin-bottom:1mm; }
+.comment-card {
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-left:5px solid #234A75;
+  border-radius:12px;
+  padding:5mm;
+  margin-top:6mm;
+  page-break-inside:avoid;
+}
+.comment-card h2 { color:#234A75; margin:0 0 3mm; font-size:14pt; }
+.comment-text { white-space:pre-wrap; color:#1F2937; font-size:10pt; line-height:1.6; }
+.brand-contact,.brand-footer {
+  margin-top:4mm;
+  padding:4mm 5mm;
+  background:#FFFFFF;
+  border:1px solid #D9E2EC;
+  border-left:4px solid #234A75;
+  border-radius:10px;
+  color:#475467;
+}
+.brand-footer { background:#F8FAFC; border-left-color:#D9E2EC; }
+.report-footer {
+  margin-top:7mm;
+  padding-top:4mm;
+  border-top:1px solid #D9E2EC;
+  display:flex;
+  gap:5mm;
+  justify-content:space-between;
+  color:#667085;
+  font-size:8pt;
+}
+.report-footer span { max-width:72%; }
 .page-break { page-break-before:always; }
