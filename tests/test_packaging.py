@@ -33,6 +33,10 @@ def test_windows_build_script_and_workflow_publish_expected_artifact():
     assert "DentalCoverageAnalyzer-Windows-Portable" in workflow
     assert "DentalCoverageAnalyzer-Windows-Installer" in workflow
     assert "Inno Setup" in workflow
+    assert "Using preinstalled Inno Setup" in workflow
+    assert "choco install innosetup --version=6.7.1" in workflow
+    assert '"ISCC_PATH=$iscc"' in workflow
+    assert '& "$env:ISCC_PATH"' in workflow
     assert "--health-check" in workflow
     assert "upload-artifact@v4" in workflow
 
