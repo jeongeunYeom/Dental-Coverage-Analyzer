@@ -1,0 +1,92 @@
+name: Build Windows MVP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-windows:
+    timeout-minutes: 20
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -e ".[build]"
+      - name: Prepare bundled Tesseract OCR
+        shell: pwsh
+        run: scripts/prepare_tesseract_windows.ps1
+      - name: Generate application icon
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/build_icon.py
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -vv --durations=20 --timeout=120
+      - name: Test bundled OCR
+        env:
+          DCA_BUNDLED_OCR_TEST: "1"
+          DCA_TESSERACT_ROOT: ${{ github.workspace }}\build\vendor\tesseract
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -vv tests/test_bundled_ocr_integration.py --timeout=120
+      - name: Generate Windows metadata
+        run: python scripts/generate_windows_metadata.py
+      - name: Build onedir application
+        run: python -m PyInstaller --noconfirm --clean DentalCoverageAnalyzer.spec
+      - name: Smoke test built application
+        run: dist\DentalCoverageAnalyzer\DentalCoverageAnalyzer.exe --health-check
+      - name: Create distribution ZIP
+        shell: pwsh
+        run: |
+          $version = python scripts/generate_windows_metadata.py
+          Compress-Archive -Path dist\DentalCoverageAnalyzer\* -DestinationPath "DentalCoverageAnalyzer-Windows-Portable-$version.zip" -Force
+      - name: Locate or install Inno Setup
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if ($iscc) {
+            $version = (Get-Item $iscc).VersionInfo.ProductVersion
+            Write-Host "Using preinstalled Inno Setup $version at $iscc"
+          } else {
+            Write-Host "Inno Setup was not found; installing pinned fallback version 6.7.1."
+            choco install innosetup --version=6.7.1 --yes --no-progress --require-checksums
+            if ($LASTEXITCODE -ne 0) { throw "Chocolatey failed to install Inno Setup." }
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          if (-not $iscc) { throw "ISCC.exe was not found after Inno Setup setup." }
+          "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "$env:ISCC_PATH" "installer\DentalCoverageAnalyzer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler failed with exit code $LASTEXITCODE." }
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $version = python scripts/generate_windows_metadata.py
+          if (-not (Test-Path "dist\installer\DentalCoverageAnalyzer-Setup-$version.exe")) { throw "Installer was not created" }
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalCoverageAnalyzer-Windows-Portable
+          path: DentalCoverageAnalyzer-Windows-Portable-*.zip
+          if-no-files-found: error
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalCoverageAnalyzer-Windows-Installer
+          path: dist/installer/DentalCoverageAnalyzer-Setup-*.exe
+          if-no-files-found: error
