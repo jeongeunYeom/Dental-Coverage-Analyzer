@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QTimer, Qt, QUrl, Signal
+from PySide6.QtCore import QSize, QThread, QTimer, Qt, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QStackedWidget,
-    QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
+    QStyle, QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult, analyze_pdf
@@ -36,6 +36,7 @@ from .settings_dialog import BrandingSettingsDialog
 from .evidence import aggregate_evidence, contract_evidence, rider_evidence
 from .evidence_dialog import EvidenceDialog
 from .presentation import confidence_label, issue_label
+from .theme import build_stylesheet
 
 
 APP_TITLE = "치아보험 보장분석표 생성기"
@@ -48,14 +49,22 @@ class DropArea(QFrame):
         super().__init__()
         self.setAcceptDrops(True)
         self.setObjectName("dropArea")
+        self.setProperty("dropActive", False)
         layout = QVBoxLayout(self)
-        icon = QLabel("🦷")
+        layout.setContentsMargins(28, 30, 28, 30)
+        layout.setSpacing(10)
+        icon = QLabel()
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet("font-size:44px")
-        text = QLabel("보험 보장분석 PDF를 여기에 끌어놓거나 클릭하여 선택하세요")
-        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        text.setWordWrap(True)
-        layout.addStretch(); layout.addWidget(icon); layout.addWidget(text); layout.addStretch()
+        pixmap = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView).pixmap(QSize(44, 44))
+        icon.setPixmap(pixmap)
+        title = QLabel("보험 보장분석 PDF")
+        title.setObjectName("dropTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        description = QLabel("PDF 파일을 여기에 끌어놓거나 아래 버튼에서 선택하세요.")
+        description.setObjectName("dropDescription")
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        description.setWordWrap(True)
+        layout.addStretch(); layout.addWidget(icon); layout.addWidget(title); layout.addWidget(description); layout.addStretch()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -64,11 +73,22 @@ class DropArea(QFrame):
     def dragEnterEvent(self, event):
         urls = event.mimeData().urls()
         if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".pdf"):
+            self._set_drop_active(True)
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event):
+        self._set_drop_active(False)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event):
+        self._set_drop_active(False)
         self.selected.emit(event.mimeData().urls()[0].toLocalFile())
         event.acceptProposedAction()
+
+    def _set_drop_active(self, active: bool) -> None:
+        self.setProperty("dropActive", active)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
 
 class AnalysisThread(QThread):
@@ -122,7 +142,8 @@ class MainWindow(QMainWindow):
     def __init__(self, *, enable_startup_prompts: bool = True) -> None:
         super().__init__()
         self.setWindowTitle(APP_TITLE)
-        self.resize(1180, 820)
+        self.resize(1280, 840)
+        self.setMinimumSize(1024, 700)
         self.path: str | None = None
         self.session: AnalysisSession | None = None
         self.worker: AnalysisThread | None = None
@@ -173,46 +194,117 @@ class MainWindow(QMainWindow):
             action = self.recent_menu.addAction(path)
             action.triggered.connect(lambda _checked=False, value=path: self.open_project(value))
 
+    def _button(self, text: str, role: str = "secondary") -> QPushButton:
+        button = QPushButton(text)
+        button.setProperty("buttonRole", role)
+        return button
+
+    def _status_badge(self, text: str) -> QLabel:
+        badge = QLabel(text)
+        badge.setObjectName("statusBadge")
+        badge.setProperty("statusBadge", True)
+        tone = {
+            "충분": "success",
+            "부족": "warning",
+            "미가입": "danger",
+            "분석 완료": "success",
+            "높음": "success",
+            "보통": "warning",
+            "확인 필요": "danger",
+            "오류": "danger",
+            "주의": "warning",
+            "안내": "neutral",
+        }.get(text, "neutral")
+        badge.setProperty("statusTone", tone)
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        return badge
+
+    def _metric(self, label: str, value: str) -> QVBoxLayout:
+        layout = QVBoxLayout(); layout.setSpacing(3)
+        label_widget = QLabel(label); label_widget.setProperty("metricLabel", True)
+        value_widget = QLabel(value); value_widget.setProperty("metricValue", True)
+        layout.addWidget(label_widget); layout.addWidget(value_widget)
+        return layout
+
+    def _empty_state(self, title: str, description: str) -> QFrame:
+        frame = QFrame(); frame.setObjectName("emptyState")
+        layout = QHBoxLayout(frame); layout.setContentsMargins(18, 16, 18, 16); layout.setSpacing(12)
+        icon = QLabel()
+        icon.setPixmap(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation).pixmap(QSize(30, 30)))
+        text = QVBoxLayout(); text.setSpacing(3)
+        title_label = QLabel(title); title_label.setObjectName("panelTitle")
+        desc_label = QLabel(description); desc_label.setObjectName("helperText"); desc_label.setWordWrap(True)
+        text.addWidget(title_label); text.addWidget(desc_label)
+        layout.addWidget(icon); layout.addLayout(text, 1)
+        return frame
+
     def _build_start_page(self) -> QWidget:
-        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(90, 60, 90, 60)
+        page = QWidget(); layout = QVBoxLayout(page); layout.setContentsMargins(90, 48, 90, 36)
+        layout.setSpacing(14)
+        shell = QWidget(); shell.setObjectName("startShell")
+        shell.setMaximumWidth(760)
+        shell_layout = QVBoxLayout(shell); shell_layout.setContentsMargins(0, 0, 0, 0); shell_layout.setSpacing(14)
+        app_icon = QLabel()
+        app_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_path = project_root() / "assets" / "app_icon.svg"
+        pixmap = QIcon(str(icon_path)).pixmap(QSize(54, 54)) if icon_path.is_file() else self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon).pixmap(QSize(54, 54))
+        app_icon.setPixmap(pixmap)
         title = QLabel("치아보험 보장분석"); title.setObjectName("title")
-        subtitle = QLabel("보험 보장분석 PDF에서 치아 관련 보장내용을 자동으로 정리하고\n고객용 보고서를 생성합니다.")
-        subtitle.setObjectName("subtitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle = QLabel("보험 보장분석 PDF를 읽어\n치아 관련 보장내용과 가입현황을 정리합니다.")
+        subtitle.setObjectName("subtitle"); subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop = DropArea(); self.drop.selected.connect(self.select_pdf)
-        self.file_label = QLabel("선택된 PDF 없음"); self.file_label.setObjectName("fileLabel")
+        self.file_card = QFrame(); self.file_card.setObjectName("fileCard")
+        file_layout = QHBoxLayout(self.file_card); file_layout.setContentsMargins(16, 12, 16, 12)
+        file_icon = QLabel()
+        file_icon.setPixmap(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon).pixmap(QSize(28, 28)))
+        file_text = QVBoxLayout(); file_text.setSpacing(2)
+        self.file_label = QLabel("선택된 PDF가 없습니다."); self.file_label.setObjectName("fileLabel")
+        self.file_description = QLabel("분석할 문서"); self.file_description.setObjectName("caption")
+        file_text.addWidget(self.file_label); file_text.addWidget(self.file_description)
+        file_layout.addWidget(file_icon); file_layout.addLayout(file_text, 1)
         buttons = QHBoxLayout()
-        choose = QPushButton("PDF 선택"); choose.clicked.connect(lambda: self.select_pdf(""))
-        open_project = QPushButton("프로젝트 열기"); open_project.clicked.connect(self.open_project)
-        self.analyze_button = QPushButton("분석 시작"); self.analyze_button.setEnabled(False); self.analyze_button.clicked.connect(self.start_analysis)
-        buttons.addWidget(choose); buttons.addWidget(open_project); buttons.addWidget(self.analyze_button)
+        choose = self._button("PDF 선택", "secondary"); choose.clicked.connect(lambda: self.select_pdf(""))
+        open_project = self._button("프로젝트 열기", "secondary"); open_project.clicked.connect(self.open_project)
+        self.analyze_button = self._button("분석 시작", "primary"); self.analyze_button.setObjectName("primaryButton")
+        self.analyze_button.setEnabled(False); self.analyze_button.clicked.connect(self.start_analysis)
+        buttons.addWidget(open_project); buttons.addStretch(); buttons.addWidget(choose); buttons.addWidget(self.analyze_button)
         self.progress = QProgressBar(); self.progress.hide()
         self.progress_label = QLabel(""); self.progress_label.hide()
-        layout.addWidget(title); layout.addWidget(subtitle); layout.addSpacing(25); layout.addWidget(self.drop, 1)
-        layout.addWidget(self.file_label); layout.addLayout(buttons); layout.addWidget(self.progress_label); layout.addWidget(self.progress)
-        privacy = QLabel("모든 분석은 이 PC에서 처리됩니다."); privacy.setObjectName("subtitle"); privacy.setAlignment(Qt.AlignmentFlag.AlignCenter); layout.addWidget(privacy)
+        self.progress_label.setObjectName("caption")
+        shell_layout.addWidget(app_icon); shell_layout.addWidget(title); shell_layout.addWidget(subtitle); shell_layout.addSpacing(14)
+        shell_layout.addWidget(self.drop, 1); shell_layout.addWidget(self.file_card); shell_layout.addLayout(buttons)
+        shell_layout.addWidget(self.progress_label); shell_layout.addWidget(self.progress)
+        privacy = QLabel("모든 문서 분석은 이 PC에서만 처리됩니다."); privacy.setObjectName("subtitle"); privacy.setAlignment(Qt.AlignmentFlag.AlignCenter); shell_layout.addWidget(privacy)
+        layout.addStretch(1); layout.addWidget(shell, 8, Qt.AlignmentFlag.AlignHCenter); layout.addStretch(1)
         return page
 
     def select_pdf(self, path: str = "") -> None:
         if not path:
             path, _ = QFileDialog.getOpenFileName(self, "보험 보장분석 PDF 선택", "", "PDF 파일 (*.pdf)")
         if path:
-            self.path = path; self.file_label.setText(Path(path).name); self.analyze_button.setEnabled(True)
+            self.path = path; self.file_label.setText(Path(path).name); self.file_description.setText("분석할 문서"); self.analyze_button.setEnabled(True)
 
     def start_analysis(self) -> None:
         if not self.path: return
-        self.analyze_button.setEnabled(False); self.progress.show(); self.progress_label.show()
-        self.progress.setValue(1); self.progress_label.setText("PDF 읽는 중")
+        self.analyze_button.setText("분석 중..."); self.analyze_button.setEnabled(False); self.progress.show(); self.progress_label.show()
+        self.progress.setValue(1); self.progress_label.setText("[분석 중] 1% · PDF 읽는 중")
         self.worker = AnalysisThread(self.path)
-        self.worker.progress.connect(lambda value, text: (self.progress.setValue(value), self.progress_label.setText(text)))
+        self.worker.progress.connect(self._update_progress)
         self.worker.completed.connect(self.analysis_completed)
         self.worker.failed.connect(self.analysis_failed)
         self.worker.start()
 
+    def _update_progress(self, value: int, text: str) -> None:
+        self.progress.setValue(value)
+        self.progress_label.setText(f"[분석 중] {value}% · {text}")
+
     def analysis_failed(self, message: str) -> None:
-        self.analyze_button.setEnabled(True)
+        self.analyze_button.setText("분석 시작"); self.analyze_button.setEnabled(True)
         QMessageBox.warning(self, "분석 실패", message)
 
     def analysis_completed(self, result: PDFAnalysisResult) -> None:
+        self.analyze_button.setText("분석 시작"); self.analyze_button.setEnabled(True)
         self.session = AnalysisSession.from_result(self.path or "", result)
         self.session.is_dirty = True
         self._build_result_page(); self.stack.setCurrentWidget(self.result_page); self._update_window_title()
@@ -221,28 +313,51 @@ class MainWindow(QMainWindow):
 
     def _build_result_page(self) -> None:
         old = self.result_page
-        self.result_page = QWidget(); root = QVBoxLayout(self.result_page); root.setContentsMargins(24, 18, 24, 18)
-        top = QHBoxLayout(); heading = QLabel("분석 결과"); heading.setObjectName("sectionTitle")
+        self.result_page = QWidget(); root = QVBoxLayout(self.result_page); root.setContentsMargins(24, 18, 24, 18); root.setSpacing(14)
+        header = QFrame(); header.setObjectName("headerCard")
+        header_layout = QHBoxLayout(header); header_layout.setContentsMargins(18, 16, 18, 16); header_layout.setSpacing(18)
+        title_box = QVBoxLayout(); title_box.setSpacing(5)
+        heading_row = QHBoxLayout(); heading_row.setSpacing(10)
+        heading = QLabel("분석 결과"); heading.setObjectName("sectionTitle")
+        heading_row.addWidget(heading); heading_row.addWidget(self._status_badge("분석 완료")); heading_row.addStretch()
+        file_name = QLabel(Path(self.session.source_path).name if self.session.source_path else "분석 문서")
+        file_name.setObjectName("panelTitle")
+        helper = QLabel("자동 분석 결과를 확인하고 필요한 항목을 수정하세요.")
+        helper.setObjectName("helperText")
+        title_box.addLayout(heading_row); title_box.addWidget(file_name); title_box.addWidget(helper)
         self.customer_name = QLineEdit(); self.customer_name.setPlaceholderText("고객명 직접 입력 (선택)")
+        self.customer_name.setFixedWidth(240)
         self.customer_name.setText(self.session.customer.name or "")
-        top.addWidget(heading); top.addStretch(); top.addWidget(QLabel("고객명")); top.addWidget(self.customer_name)
-        root.addLayout(top)
+        customer_box = QVBoxLayout(); customer_box.setSpacing(5)
+        customer_label = QLabel("고객명"); customer_label.setObjectName("caption")
+        customer_box.addWidget(customer_label); customer_box.addWidget(self.customer_name)
+        header_layout.addLayout(title_box, 1); header_layout.addLayout(customer_box)
+        root.addWidget(header)
         self.tabs = QTabWidget(); root.addWidget(self.tabs, 1)
         self.tabs.addTab(self._summary_tab(), "전체 요약")
         self.tabs.addTab(self._contracts_tab(), "치아보험 상품")
         self.tabs.addTab(self._riders_tab(), "세부 치아담보")
         self.tabs.addTab(self._issues_tab(), "확인 필요")
         self.tabs.addTab(self._source_tab(), "원본 정보")
-        root.addWidget(QLabel("상담 코멘트"))
+        comment_card = QFrame(); comment_card.setObjectName("commentCard")
+        comment_layout = QVBoxLayout(comment_card); comment_layout.setContentsMargins(16, 14, 16, 14); comment_layout.setSpacing(6)
+        comment_title = QLabel("상담 코멘트"); comment_title.setObjectName("panelTitle")
+        comment_helper = QLabel("보고서에 표시할 내용을 입력하세요. 선택 사항입니다."); comment_helper.setObjectName("helperText")
         self.comment_edit = QTextEdit()
         self.comment_edit.setPlaceholderText("보고서에 함께 표시할 코멘트를 입력하세요.")
         self.comment_edit.setPlainText(self.session.comment)
+        self.comment_edit.setMinimumHeight(80)
         self.comment_edit.setMaximumHeight(100)
-        root.addWidget(self.comment_edit)
-        actions = QHBoxLayout(); back = QPushButton("새 분석"); back.clicked.connect(self.start_other_pdf)
-        preview = QPushButton("보고서 미리보기"); preview.clicked.connect(self.preview_report)
-        save = QPushButton("PDF 저장"); save.setObjectName("primaryButton"); save.clicked.connect(self.save_report)
-        actions.addWidget(back); actions.addStretch(); actions.addWidget(preview); actions.addWidget(save); root.addLayout(actions)
+        comment_layout.addWidget(comment_title); comment_layout.addWidget(comment_helper); comment_layout.addWidget(self.comment_edit)
+        root.addWidget(comment_card)
+        actions_frame = QFrame(); actions_frame.setObjectName("bottomActionBar")
+        actions_frame.setStyleSheet("#bottomActionBar { border-top:1px solid #E4E7EC; background:transparent; }")
+        actions = QHBoxLayout(actions_frame); actions.setContentsMargins(0, 12, 0, 0)
+        back = self._button("새 분석", "ghost"); back.clicked.connect(self.start_other_pdf)
+        preview = self._button("보고서 미리보기", "secondary"); preview.clicked.connect(self.preview_report)
+        save = self._button("PDF 저장", "primary"); save.setObjectName("primaryButton"); save.clicked.connect(self.save_report)
+        actions.addWidget(back); actions.addStretch(); actions.addWidget(preview); actions.addWidget(save)
+        root.addWidget(actions_frame)
         self._connect_dirty_signals()
         self.stack.addWidget(self.result_page); self.stack.removeWidget(old); old.deleteLater()
 
@@ -284,96 +399,149 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_TITLE + suffix)
 
     def _summary_tab(self) -> QWidget:
-        widget = QWidget(); layout = QVBoxLayout(widget)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); cards = QWidget(); cards_layout = QVBoxLayout(cards)
+        widget = QWidget(); layout = QVBoxLayout(widget); layout.setContentsMargins(14, 14, 14, 14); layout.setSpacing(12)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
+        cards = QWidget(); cards_layout = QVBoxLayout(cards); cards_layout.setContentsMargins(0, 0, 0, 0); cards_layout.setSpacing(12)
         for item in self.session.aggregates:
             normalized = normalize_aggregate_values(item)
-            card = QFrame(); card.setObjectName("card"); row = QHBoxLayout(card)
+            card = QFrame(); card.setObjectName("card")
+            card_layout = QVBoxLayout(card); card_layout.setContentsMargins(18, 16, 18, 16); card_layout.setSpacing(14)
             color = CATEGORY_COLORS.get(item.category or "", DEFAULT_COLOR)
-            name = QLabel(item.raw_name); name.setStyleSheet(f"font-size:18px;font-weight:700;color:{color}")
-            row.addWidget(name, 2)
-            for label, value in (("가입금액", format_money(item.enrolled_amount)), ("권장금액", format_money(item.recommended_amount)), ("보장률", f"{normalized.ratio:.0f}%" if normalized.ratio is not None else "정보 없음"), ("상태", normalized.status)):
-                box = QLabel(f"<span style='color:#7B8297'>{label}</span><br><b>{value}</b>"); row.addWidget(box, 1)
+            header = QHBoxLayout(); header.setSpacing(10)
+            name = QLabel(item.raw_name); name.setStyleSheet(f"font-size:17px;font-weight:700;color:{color}")
+            name.setWordWrap(True)
+            header.addWidget(name, 1); header.addWidget(self._status_badge(normalized.status or "정보 없음"))
+            metrics = QHBoxLayout(); metrics.setSpacing(22)
+            for label, value in (
+                ("현재 가입", format_money(item.enrolled_amount)),
+                ("권장 보장", format_money(item.recommended_amount)),
+                ("보장률", f"{normalized.ratio:.0f}%" if normalized.ratio is not None else "정보 없음"),
+            ):
+                metrics.addLayout(self._metric(label, value))
+            shortage = QLabel(f"부족금액 {format_money(normalized.shortage)}")
+            shortage.setObjectName("helperText")
+            card_layout.addLayout(header); card_layout.addLayout(metrics); card_layout.addWidget(shortage)
             cards_layout.addWidget(card)
         cards_layout.addStretch(); scroll.setWidget(cards); layout.addWidget(scroll, 1)
         self.aggregate_table = self._table(["담보명", "카테고리", "권장금액(원)", "가입금액(원)", "부족금액(원)", "상태", "출처 페이지", "분석 신뢰도"])
         self._fill_aggregates(); layout.addWidget(self.aggregate_table, 1)
         buttons = self._add_delete_buttons("전체 보장 추가", self.add_aggregate, "선택 보장 삭제", self.delete_aggregate)
-        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_aggregate_evidence); buttons.addWidget(evidence)
+        evidence = self._button("원본 근거 보기", "ghost"); evidence.clicked.connect(self.show_aggregate_evidence); buttons.addWidget(evidence)
         layout.addLayout(buttons)
         return widget
 
     def _contracts_tab(self) -> QWidget:
-        widget = QWidget(); layout = QVBoxLayout(widget)
+        widget = QWidget(); layout = QVBoxLayout(widget); layout.setContentsMargins(14, 14, 14, 14); layout.setSpacing(12)
         self.contract_table = self._table(["보험사", "상품명", "가입일", "보험기간", "월보험료(원)", "납입기간", "납입주기", "만기", "출처 페이지", "분석 신뢰도"])
         self.dental_contracts = select_dental_report_contracts(self.session.contracts, self.session.riders)
         if not self.dental_contracts:
-            empty = QLabel("없음"); empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet("font-size:18px;font-weight:700;color:#858CA0;padding:24px")
-            layout.addWidget(empty)
+            layout.addWidget(self._empty_state("가입된 치아보험이 없습니다", "원본 문서에서 확인 가능한 치아보험 상품이 없습니다."))
         for row, item in enumerate(self.dental_contracts):
             self.contract_table.insertRow(row)
             values = [item.insurer, item.product_name, item.enrollment_date.isoformat() if item.enrollment_date else None, item.coverage_period, item.monthly_premium, item.payment_period, item.payment_cycle, item.maturity, ", ".join(str(s.page) for s in item.sources), confidence_label(item.confidence)]
             self._set_row(self.contract_table, row, values)
             raw = "\n\n".join(source.raw_text or "" for source in item.sources)
             for col in range(self.contract_table.columnCount()): self.contract_table.item(row, col).setToolTip(raw)
+            self._set_confidence_cell(self.contract_table.item(row, 9))
         layout.addWidget(self.contract_table)
-        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_contract_evidence); layout.addWidget(evidence)
+        evidence = self._button("원본 근거 보기", "ghost"); evidence.clicked.connect(self.show_contract_evidence); layout.addWidget(evidence)
         return widget
 
     def _riders_tab(self) -> QWidget:
-        widget = QWidget(); layout = QVBoxLayout(widget)
+        widget = QWidget(); layout = QVBoxLayout(widget); layout.setContentsMargins(14, 14, 14, 14); layout.setSpacing(12)
         self.rider_table = self._table(["담보명", "카테고리", "보험사", "상품명", "가입금액(원)", "질병/상해", "지급단위", "출처 페이지", "분석 신뢰도"])
         self._fill_riders(); layout.addWidget(self.rider_table)
         buttons = self._add_delete_buttons("세부 담보 추가", self.add_rider, "선택 세부 담보 삭제", self.delete_rider)
-        evidence = QPushButton("원본 근거 보기"); evidence.clicked.connect(self.show_rider_evidence); buttons.addWidget(evidence)
+        evidence = self._button("원본 근거 보기", "ghost"); evidence.clicked.connect(self.show_rider_evidence); buttons.addWidget(evidence)
         layout.addLayout(buttons)
         return widget
 
     def _issues_tab(self) -> QWidget:
-        widget = QWidget(); layout = QVBoxLayout(widget)
+        widget = QWidget(); layout = QVBoxLayout(widget); layout.setContentsMargins(14, 14, 14, 14)
         table = self._table(["등급", "구분", "확인할 내용", "페이지"]); table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         row = 0
         for issue in self.session.result.validation_issues:
             severity = {"INFO":"안내", "WARNING":"주의", "ERROR":"오류"}.get(issue.severity.value, issue.severity.value)
             table.insertRow(row); self._set_row(table, row, [severity, issue_label(issue.code), issue.message, ", ".join(map(str, issue.page_numbers))])
-            color = QColor("#FFF1F2" if issue.severity.value == "ERROR" else "#FFF8E6")
+            color = QColor("#FFF9F9" if issue.severity.value == "ERROR" else "#FFFCF5")
             tooltip = "\n".join(issue.raw_values)
             for col in range(table.columnCount()):
                 table.item(row, col).setBackground(color); table.item(row, col).setToolTip(tooltip)
+            self._set_status_cell(table.item(row, 0))
             row += 1
         for warning in self.session.aggregate_conflict_warnings:
             table.insertRow(row); self._set_row(table, row, ["주의", "보장정보 확인 필요", warning, "상세 문구 참조"])
-            for col in range(table.columnCount()): table.item(row, col).setBackground(QColor("#FFF8E6"))
+            for col in range(table.columnCount()): table.item(row, col).setBackground(QColor("#FFFCF5"))
+            self._set_status_cell(table.item(row, 0))
             row += 1
+        if row == 0:
+            layout.addWidget(self._empty_state("확인할 항목이 없습니다", "자동 분석 중 사용자 확인이 필요한 항목이 발견되지 않았습니다."))
         layout.addWidget(table); return widget
 
     def _source_tab(self) -> QWidget:
-        widget = QWidget(); layout = QVBoxLayout(widget)
+        widget = QWidget(); layout = QVBoxLayout(widget); layout.setContentsMargins(14, 14, 14, 14); layout.setSpacing(12)
         result = self.session.result
-        layout.addWidget(QLabel(f"원본 PDF: {self.session.source_path}"))
-        layout.addWidget(QLabel(f"Provider: {result.provider} / 지원 수준: {result.support_summary.support_level.value if result.support_summary else '정보 없음'}"))
+        meta = QFrame(); meta.setObjectName("sourceMetaCard")
+        meta_layout = QHBoxLayout(meta); meta_layout.setContentsMargins(16, 14, 16, 14); meta_layout.setSpacing(20)
+        provider = result.provider or "정보 없음"
+        support = result.support_summary.support_level.value if result.support_summary else "정보 없음"
+        for label, value in (("원본 PDF", Path(self.session.source_path).name), ("보험사 인식", provider), ("지원 상태", support)):
+            meta_layout.addLayout(self._metric(label, value))
+        meta_layout.addStretch()
+        layout.addWidget(meta)
+        if not self.session.original_pdf_available:
+            layout.addWidget(self._empty_state("원본 PDF 파일을 찾을 수 없습니다", "기존 분석 결과는 계속 사용할 수 있습니다."))
+        source_title = QLabel("추출된 원본 내용"); source_title.setObjectName("panelTitle")
+        layout.addWidget(source_title)
         browser = QTextBrowser(); browser.setPlainText("\n\n".join(
             f"[페이지 {p.page_number}] [최종 출처: {p.effective_source.value}]\n"
             f"--- Text Layer ---\n{p.text_layer_text or '(없음)'}\n"
             f"--- OCR ---\n{p.ocr_text or '(사용 안 함/실패)'}"
             for p in result.document.pages
         )); layout.addWidget(browser)
-        open_button = QPushButton("원본 PDF 열기"); open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.session.source_path))); layout.addWidget(open_button)
+        open_button = self._button("원본 PDF 열기", "secondary"); open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.session.source_path))); layout.addWidget(open_button)
         open_button.setEnabled(self.session.original_pdf_available)
-        if not self.session.original_pdf_available:
-            layout.insertWidget(1, QLabel("원본 PDF 파일을 찾을 수 없습니다. 기존 분석 결과는 계속 사용할 수 있습니다."))
         return widget
 
     def _table(self, headers) -> QTableWidget:
         table = QTableWidget(0, len(headers)); table.setHorizontalHeaderLabels(headers); table.setAlternatingRowColors(True); table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); return table
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(38)
+        table.setShowGrid(False)
+        return table
 
     def _set_row(self, table, row, values) -> None:
         for col, value in enumerate(values): table.setItem(row, col, QTableWidgetItem("정보 없음" if value is None else str(value)))
 
+    def _set_status_cell(self, item: QTableWidgetItem) -> None:
+        text = item.text()
+        foreground, background = {
+            "충분": ("#16875D", "#EAF7F0"),
+            "부족": ("#B66D00", "#FFF6E5"),
+            "미가입": ("#D92D20", "#FEF3F2"),
+            "오류": ("#D92D20", "#FEF3F2"),
+            "주의": ("#B66D00", "#FFF6E5"),
+            "안내": ("#475467", "#F2F4F7"),
+        }.get(text, ("#475467", "#F2F4F7"))
+        item.setForeground(QColor(foreground))
+        item.setBackground(QColor(background))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def _set_confidence_cell(self, item: QTableWidgetItem) -> None:
+        text = item.text()
+        foreground, background = {
+            "높음": ("#16875D", "#EAF7F0"),
+            "보통": ("#9A6700", "#FFF6E5"),
+            "확인 필요": ("#D92D20", "#FEF3F2"),
+        }.get(text, ("#475467", "#F2F4F7"))
+        item.setForeground(QColor(foreground))
+        item.setBackground(QColor(background))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
     def _add_delete_buttons(self, add_text, add_slot, delete_text, delete_slot):
-        layout = QHBoxLayout(); add = QPushButton(add_text); delete = QPushButton(delete_text); add.clicked.connect(add_slot); delete.clicked.connect(delete_slot); layout.addWidget(add); layout.addWidget(delete); layout.addStretch(); return layout
+        layout = QHBoxLayout(); add = self._button(add_text, "outlinePrimary"); delete = self._button(delete_text, "danger")
+        add.clicked.connect(add_slot); delete.clicked.connect(delete_slot); layout.addWidget(add); layout.addWidget(delete); layout.addStretch(); return layout
 
     def _fill_aggregates(self):
         self.aggregate_table.setRowCount(0)
@@ -383,6 +551,8 @@ class MainWindow(QMainWindow):
             self.aggregate_table.insertRow(row); self._set_row(self.aggregate_table, row, [item.raw_name, item.category, item.recommended_amount, item.enrolled_amount, normalized.shortage, normalized.status, ", ".join(map(str, item.source_pages)), confidence])
             raw = item.representative_source.raw_text if item.representative_source else ""
             for col in range(self.aggregate_table.columnCount()): self.aggregate_table.item(row, col).setToolTip(raw or "")
+            self._set_status_cell(self.aggregate_table.item(row, 5))
+            self._set_confidence_cell(self.aggregate_table.item(row, 7))
 
     def _fill_riders(self):
         self.rider_table.setRowCount(0)
@@ -391,6 +561,7 @@ class MainWindow(QMainWindow):
             confidence = confidence_label(item.confidence)
             self.rider_table.insertRow(row); self._set_row(self.rider_table, row, [item.raw_name, item.category, item.insurer, item.product_name, item.enrolled_amount, cause_label(item.cause_type), payment_label(item.payment_unit), ", ".join(map(str, pages)), confidence])
             for col in range(self.rider_table.columnCount()): self.rider_table.item(row, col).setToolTip(item.raw_text or "")
+            self._set_confidence_cell(self.rider_table.item(row, 8))
 
     def add_aggregate(self): self.session.add_aggregate(); self._fill_aggregates(); self._mark_dirty()
     def add_rider(self): self.session.add_rider(); self._fill_riders(); self._mark_dirty()
@@ -488,7 +659,7 @@ class MainWindow(QMainWindow):
         self._show_evidence(rider_evidence(self.session.riders[row]))
 
     def _show_onboarding(self) -> None:
-        QMessageBox.information(self, APP_TITLE, "1. 보험 보장분석 PDF 선택\n2. 분석 결과 확인 및 수정\n3. 상담 코멘트 작성\n4. PDF 보고서 저장\n\n모든 분석은 이 PC에서 처리됩니다.")
+        QMessageBox.information(self, APP_TITLE, "1. PDF 선택\n2. 분석 결과 확인\n3. 보고서 저장\n\n모든 분석은 이 PC에서 처리됩니다.")
         self.branding.onboarding_completed = True
         try: save_settings(self.branding)
         except OSError: pass
@@ -610,7 +781,9 @@ class MainWindow(QMainWindow):
         if not self._confirm_unsaved_changes():
             return
         self.session = None; self.path = None
-        self.file_label.setText("선택된 PDF 없음"); self.analyze_button.setEnabled(False)
+        self.file_label.setText("선택된 PDF가 없습니다."); self.file_description.setText("분석할 문서")
+        self.analyze_button.setText("분석 시작"); self.analyze_button.setEnabled(False)
+        self.progress.hide(); self.progress_label.hide(); self.progress.setValue(0)
         self.stack.setCurrentWidget(self.start_page); self._update_window_title()
 
     def closeEvent(self, event) -> None:
@@ -629,20 +802,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _apply_style(self):
-        self.setStyleSheet("""
-        QMainWindow,QWidget { background:#F7F8FC; color:#262A40; font-family:'Malgun Gothic'; font-size:13px; }
-        #title { font-size:30px; font-weight:800; color:#252943; } #subtitle,#fileLabel { color:#737A91; }
-        #dropArea { background:white; border:2px dashed #B7B5FA; border-radius:18px; min-height:280px; }
-        QPushButton { background:white; border:1px solid #DADDEA; border-radius:9px; padding:10px 18px; font-weight:600; }
-        QPushButton:hover { border-color:PRIMARY; } #primaryButton { background:PRIMARY; color:white; border:none; }
-        #sectionTitle { font-size:24px; font-weight:800; } #card { background:white; border:1px solid #E6E7EF; border-radius:14px; padding:8px; }
-        QTabWidget::pane { border:1px solid #E2E4EE; background:white; border-radius:10px; }
-        QTabBar::tab { padding:11px 18px; } QTabBar::tab:selected { color:PRIMARY; font-weight:700; }
-        QTableWidget { background:white; border:0; gridline-color:#ECEEF4; } QHeaderView::section { background:#F0F1F7; padding:8px; border:0; font-weight:700; }
-        QLineEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
-        QTextEdit { background:white; border:1px solid #DADDEA; border-radius:8px; padding:8px; }
-        QProgressBar { border:0; border-radius:6px; background:#E6E7F0; height:12px; } QProgressBar::chunk { border-radius:6px; background:#625EF5; }
-        """.replace("PRIMARY", self.branding.primary_color))
+        self.setStyleSheet(build_stylesheet())
 
 
 def run_gui() -> int:
