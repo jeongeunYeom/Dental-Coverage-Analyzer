@@ -111,3 +111,19 @@ python scripts/generate_sample_report.py
 - 분석 결과에서 **원본 근거 보기**를 누르면 출처 페이지, 원문과 분석 신뢰도를 확인할 수 있습니다. 원본 PDF가 없어도 저장된 근거는 계속 표시됩니다.
 - 진단 데이터는 **도구 → 고급 기능 → 진단 데이터 저장**에서 저장할 수 있습니다.
 - 분석, 자동복구 및 브랜드 설정은 모두 이 PC에서만 처리되며 외부 서버로 전송되지 않습니다.
+
+## Windows 설치판과 Portable 배포
+
+지원 범위는 Windows 10/11 64-bit입니다. GitHub Actions artifact에는 두 배포물이 생성됩니다.
+
+- **DentalCoverageAnalyzer-Windows-Installer**: Setup.exe를 실행한 뒤 시작 메뉴에서 프로그램을 실행합니다.
+- **DentalCoverageAnalyzer-Windows-Portable**: ZIP을 원하는 폴더에 풀고 폴더 구조를 유지한 채 `DentalCoverageAnalyzer.exe`를 실행합니다.
+
+두 방식 모두 Python과 Tesseract를 별도로 설치하거나 PATH를 설정할 필요가 없습니다. OCR 실행 파일,
+필수 DLL, `kor`/`eng` 언어 데이터는 빌드 시 포함되며 실행 중 인터넷 다운로드는 하지 않습니다.
+설치 제거는 프로그램 파일만 제거하고 `%LOCALAPPDATA%/DentalCoverageAnalyzer`의 사용자 설정과
+사용자가 저장한 `.dca` 프로젝트는 삭제하지 않습니다.
+
+배포 상태 확인은 명령 프롬프트에서 `DentalCoverageAnalyzer.exe --health-check`로 실행할 수 있습니다.
+정상 배포는 `APP_OK`와 `OCR_OK`를 출력합니다. 코드 서명되지 않은 개발용 build는 SmartScreen 경고가
+표시될 수 있으며, Windows 보안 기능을 끄지 말고 게시자와 다운로드 출처를 확인해야 합니다.

@@ -6,3 +6,12 @@ build/
 dist/
 *.egg-info/
 analysis_debug.json
+*.exe
+*.dll
+*.ico
+*.png
+*.jpg
+*.jpeg
+*.traineddata
+*.zip
+*.msi

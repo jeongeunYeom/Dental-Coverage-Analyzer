@@ -5,11 +5,20 @@ from PyInstaller.utils.hooks import collect_submodules
 root = Path(SPECPATH)
 src = root / "src"
 resources = src / "dental_coverage_analyzer" / "resources"
+tesseract = root / "build" / "vendor" / "tesseract"
+icon = root / "build" / "generated" / "app_icon.ico"
 
 datas = [
     (str(resources), "dental_coverage_analyzer/resources"),
     (str(root / "config"), "config"),
+    (str(root / "THIRD_PARTY_NOTICES.txt"), "."),
 ]
+if not (tesseract / "tesseract.exe").is_file():
+    raise SystemExit("Bundled Tesseract is missing; run scripts/prepare_tesseract_windows.ps1")
+datas.append((str(tesseract), "tesseract"))
+if not icon.is_file():
+    raise SystemExit("Generated icon is missing; run scripts/build_icon.py")
+datas.append((str(icon), "assets"))
 hiddenimports = collect_submodules("dental_coverage_analyzer") + [
     "PySide6.QtPrintSupport",
 ]
@@ -34,7 +43,9 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon=None,
+    contents_directory=".",
+    icon=str(icon),
+    version=str(root / "packaging" / "version_info.txt"),
 )
 coll = COLLECT(
     exe, a.binaries, a.datas,

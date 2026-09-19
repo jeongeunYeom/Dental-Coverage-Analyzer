@@ -14,7 +14,7 @@ dental-coverage-analyzer = "dental_coverage_analyzer.__main__:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
-build = ["pytest>=8.0", "pytest-timeout>=2.3", "PyInstaller>=6.10"]
+build = ["pytest>=8.0", "pytest-timeout>=2.3", "PyInstaller>=6.10", "Pillow>=10.4"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

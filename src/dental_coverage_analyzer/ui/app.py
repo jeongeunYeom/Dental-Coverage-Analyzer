@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import QThread, QTimer, Qt, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QStackedWidget,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult, analyze_pdf
+from dental_coverage_analyzer.core.resources import project_root
 from dental_coverage_analyzer.branding import BrandingSettings
 from dental_coverage_analyzer.core.processing import normalize_aggregate_values
 from dental_coverage_analyzer.models import Confidence
@@ -640,5 +641,8 @@ class MainWindow(QMainWindow):
 def run_gui() -> int:
     app = QApplication.instance() or QApplication([])
     app.setApplicationName(APP_TITLE)
+    icon = project_root() / "assets" / "app_icon.ico"
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
     window = MainWindow(); window.show()
     return app.exec()
