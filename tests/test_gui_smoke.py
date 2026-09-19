@@ -121,3 +121,61 @@ def test_gui_window_can_process_events_without_modal_startup(monkeypatch):
     app.processEvents()
     assert window.isEnabled()
     window.close()
+
+
+def test_close_requests_running_analysis_interruption(monkeypatch):
+    pytest.importorskip("PySide6", reason="PySide6가 필요한 GUI thread regression test")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PySide6.QtGui import QCloseEvent
+        from PySide6.QtWidgets import QApplication
+        from dental_coverage_analyzer.ui.app import MainWindow
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
+
+    class RunningWorker:
+        interrupted = False
+        def isRunning(self): return True
+        def requestInterruption(self): self.interrupted = True
+        def wait(self, timeout): return timeout == 5_000
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(enable_startup_prompts=False)
+    worker = RunningWorker(); window.worker = worker
+    event = QCloseEvent(); window.closeEvent(event)
+    assert worker.interrupted is True
+    assert event.isAccepted()
+
+
+def test_contract_enrollment_date_edit_survives_report_and_project_round_trip(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6", reason="PySide6가 필요한 GUI contract regression test")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PySide6.QtWidgets import QApplication
+        from dental_coverage_analyzer.ui.app import MainWindow
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
+    from datetime import date
+    from dental_coverage_analyzer.core.pdf.analyzer import PDFAnalysisResult
+    from dental_coverage_analyzer.models import Confidence, InsuranceContract, PDFDocumentData
+    from dental_coverage_analyzer.ui.project_store import load_project, save_project
+    from dental_coverage_analyzer.ui.session import AnalysisSession
+
+    app = QApplication.instance() or QApplication([])
+    document = PDFDocumentData(tmp_path / "synthetic.pdf", "synthetic.pdf", 0, {}, False, [])
+    result = PDFAnalysisResult(document, {}, [], {}, [], [], [])
+    contract = InsuranceContract(
+        insurer="가상손해보험", product_name="가상 치아보험",
+        enrollment_date=date(2025, 1, 1), confidence=Confidence.HIGH,
+    )
+    window = MainWindow(enable_startup_prompts=False)
+    window.session = AnalysisSession("synthetic.pdf", contracts=[contract], result=result)
+    window._build_result_page()
+    window.contract_table.item(0, 2).setText("2025-02-03")
+    assert window.report_data() is not None
+    assert contract.enrollment_date == date(2025, 2, 3)
+
+    destination = tmp_path / "contract-date.dca"
+    save_project(window.session, destination)
+    assert load_project(destination).session.contracts[0].enrollment_date == date(2025, 2, 3)
+    window.session.is_dirty = False; window.close()

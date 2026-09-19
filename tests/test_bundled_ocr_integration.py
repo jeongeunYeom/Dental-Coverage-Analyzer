@@ -1,3 +1,4 @@
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -9,13 +10,9 @@ from dental_coverage_analyzer.core.pdf.tesseract_ocr import TesseractOCREngine
 
 
 @pytest.mark.skipif(os.environ.get("DCA_BUNDLED_OCR_TEST") != "1", reason="Windows release bundle test")
-def test_real_bundled_tesseract_loads_korean_and_english_and_recognizes_text(monkeypatch):
-    pytest.importorskip("PySide6")
-    try:
-        from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
-        from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QImage, QPainter
-    except ImportError as exc:
-        pytest.skip(f"Qt system library unavailable: {exc}")
+def test_real_bundled_tesseract_loads_korean_and_english_and_recognizes_text():
+    from PIL import Image, ImageDraw, ImageFont
+
     root = Path(os.environ["DCA_TESSERACT_ROOT"])
     executable = root / "tesseract.exe"
     tessdata = root / "tessdata"
@@ -43,28 +40,28 @@ def test_real_bundled_tesseract_loads_korean_and_english_and_recognizes_text(mon
     loaded_languages = {line.strip() for line in languages.stdout.splitlines()}
     assert {"kor", "eng"} <= loaded_languages
 
-    # QFont/QFontDatabase require a live GUI application on Windows. Keep a
-    # strong reference until all painting and image serialization are complete.
-    gui_application = QGuiApplication.instance() or QGuiApplication([])
-    families = set(QFontDatabase.families())
-    font_family = next(
-        (candidate for candidate in ("Malgun Gothic", "Segoe UI", "Arial") if candidate in families),
-        QFont().family(),
+    font_candidates = (
+        Path(r"C:\Windows\Fonts\arial.ttf"),
+        Path(r"C:\Windows\Fonts\segoeui.ttf"),
+        Path(r"C:\Windows\Fonts\calibri.ttf"),
     )
+    font_path = next((candidate for candidate in font_candidates if candidate.is_file()), None)
+    assert font_path is not None, f"No stable Windows TrueType font found: {font_candidates}"
+    font = ImageFont.truetype(str(font_path), 80)
 
-    image = QImage(900, 180, QImage.Format.Format_RGB32)
-    image.fill(QColor("white"))
-    painter = QPainter(image)
-    painter.setPen(QColor("black")); painter.setFont(QFont(font_family, 32))
-    painter.drawText(image.rect(), Qt.AlignmentFlag.AlignCenter, "Dental 200 치아")
-    painter.end()
-    payload = QByteArray(); buffer = QBuffer(payload); buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-    assert image.save(buffer, "PNG")
-    buffer.close()
+    test_text = "DENTAL COVERAGE ANALYSIS\nDENTAL INSURANCE 2000000\nDENTAL COVERAGE 500000"
+    image = Image.new("RGB", (1600, 700), "white")
+    ImageDraw.Draw(image).multiline_text(
+        (100, 100), test_text, fill="black", font=font, spacing=70,
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    payload = buffer.getvalue()
+    assert payload.startswith(b"\x89PNG\r\n\x1a\n")
 
     result = TesseractOCREngine(executable).recognize(bytes(payload), ("kor", "eng"))
     print(f"OCR status: {result.status}")
     print(f"OCR reason: {result.reason}")
     assert result.status is OCRStatus.SUCCESS, result.reason
     assert result.text.strip(), "bundled OCR returned empty text"
-    assert gui_application is not None
+    assert "DENTAL" in result.text.upper()

@@ -125,7 +125,8 @@ def _rank(item: AggregateCoverage) -> tuple[int, int, int, int, int, int, int]:
     )
 
 
-def _group_key(item: AggregateCoverage) -> str:
+def aggregate_group_key(item: AggregateCoverage) -> str:
+    """Return the canonical identity shared by selection and user deletion."""
     if item.category in _MAIN_CATEGORIES:
         return item.category
     return item.normalized_name or "".join(item.raw_name.split())
@@ -148,7 +149,7 @@ def select_canonical_aggregates(candidates: list[AggregateCoverage]) -> Canonica
     groups: dict[str, list[AggregateCoverage]] = {}
     order: list[str] = []
     for item in candidates:
-        key = _group_key(item)
+        key = aggregate_group_key(item)
         if key not in groups:
             groups[key] = []
             order.append(key)

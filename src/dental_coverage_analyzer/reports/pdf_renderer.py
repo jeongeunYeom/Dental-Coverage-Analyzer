@@ -54,15 +54,18 @@ def plan_report_pages(data: ReportData) -> tuple[ReportPagePlan, ...]:
         for start in range(0, len(data.riders), 7):
             pages.append(ReportPagePlan("riders", riders=data.riders[start:start + 7]))
     if data.comment.strip():
+        has_branding_footer = data.branding.has_contact_details or bool(data.branding.footer_text.strip())
         can_attach = (
             pages[-1].kind == "summary" and len(data.aggregates) <= 2
             and len(data.aggregate_warnings) <= 1 and len(data.contracts) <= 2
             and len(_comment_lines(data.comment)) <= 10
+            and not has_branding_footer
         )
         if can_attach:
             pages[-1] = replace(pages[-1], comment=data.comment)
         else:
-            pages.extend(ReportPagePlan("comment", comment=chunk) for chunk in _comment_chunks(data.comment))
+            lines_per_page = 14 if has_branding_footer else 22
+            pages.extend(ReportPagePlan("comment", comment=chunk) for chunk in _comment_chunks(data.comment, lines_per_page))
     return tuple(pages)
 
 
@@ -160,31 +163,43 @@ def _draw_page(p, canvas, data, plan, page_no, page_count, is_last, Qt, QColor, 
     else:
         y = 90 * scale
 
+    contact = " · ".join(filter(None, (
+        data.branding.company_name,
+        f"담당자 {data.branding.consultant_name}" if data.branding.consultant_name else "",
+        data.branding.phone, data.branding.email,
+    ))) if is_last else ""
+    brand_text = "\n".join(value for value in (contact, data.branding.footer_text.strip()) if value)
+    brand_height = 0.0
+    if brand_text:
+        p.setFont(font(8.5, QFont.Weight.Bold))
+        brand_flags = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap
+        brand_measure = QFontMetricsF(p.font()).boundingRect(
+            QRectF(0, 0, content.width() - 36 * scale, canvas.height()), brand_flags, brand_text,
+        )
+        brand_height = max(68 * scale, brand_measure.height() + 28 * scale)
+    disclaimer_top = canvas.height() - 190 * scale if is_last else canvas.height() - 70 * scale
+    brand_bottom = disclaimer_top - 17 * scale
+    brand_top = brand_bottom - brand_height
+
     if plan.comment:
-        disclaimer_top = canvas.height() - 190 * scale if is_last else canvas.height() - 70 * scale
+        comment_limit = brand_top - 18 * scale if brand_height else disclaimer_top - 18 * scale
         p.setFont(font(10))
         flags = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap
         measured = QFontMetricsF(p.font()).boundingRect(
             QRectF(0, 0, content.width() - 48 * scale, canvas.height()), flags, plan.comment,
         )
         comment_height = max(112 * scale, measured.height() + 72 * scale)
-        comment_top = max(y + 24 * scale, disclaimer_top - comment_height - 18 * scale)
+        comment_top = max(y + 24 * scale, comment_limit - comment_height)
         comment_rect = QRectF(margin, comment_top, content.width(), comment_height)
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#F1F0FF")); p.drawRoundedRect(comment_rect, 16 * scale, 16 * scale)
         draw_label(QRectF(comment_rect.left() + 24 * scale, comment_rect.top() + 14 * scale, comment_rect.width() - 48 * scale, 30 * scale), "상담 코멘트", 12, QColor("#625EF5"), QFont.Weight.Bold)
         draw_label(QRectF(comment_rect.left() + 24 * scale, comment_rect.top() + 48 * scale, comment_rect.width() - 48 * scale, comment_rect.height() - 62 * scale), plan.comment, 10, text, flags=flags)
 
     if is_last:
-        contact = " · ".join(filter(None, (
-            data.branding.company_name,
-            f"담당자 {data.branding.consultant_name}" if data.branding.consultant_name else "",
-            data.branding.phone, data.branding.email,
-        )))
-        if contact or data.branding.footer_text.strip():
-            brand_box = QRectF(margin, canvas.height() - 275 * scale, content.width(), 68 * scale)
+        if brand_text:
+            brand_box = QRectF(margin, brand_top, content.width(), brand_height)
             p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#F1F0FF")); p.drawRoundedRect(brand_box, 12 * scale, 12 * scale)
-            lines = "\n".join(value for value in (contact, data.branding.footer_text.strip()) if value)
-            draw_label(brand_box.adjusted(18 * scale, 8 * scale, -18 * scale, -8 * scale), lines, 8.5, QColor(data.branding.primary_color), QFont.Weight.Bold, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap)
+            draw_label(brand_box.adjusted(18 * scale, 8 * scale, -18 * scale, -8 * scale), brand_text, 8.5, QColor(data.branding.primary_color), QFont.Weight.Bold, brand_flags)
         box = QRectF(margin, canvas.height() - 190 * scale, content.width(), 105 * scale)
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#EEF0F5")); p.drawRoundedRect(box, 12 * scale, 12 * scale)
         disclaimer = DISCLAIMER + " 서로 다른 지급단위의 세부 담보는 단순 합산하지 않았습니다."

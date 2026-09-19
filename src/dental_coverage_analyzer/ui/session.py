@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from dental_coverage_analyzer.core.pdf import PDFAnalysisResult
-from dental_coverage_analyzer.core.processing import select_canonical_aggregates
+from dental_coverage_analyzer.core.processing import aggregate_group_key, select_canonical_aggregates
 from dental_coverage_analyzer.models import (
     AggregateCoverage, CauseType, Confidence, CustomerInfo, DentalRider,
     InsuranceContract, PaymentUnit,
@@ -61,12 +61,30 @@ class AnalysisSession:
         self.riders.append(item)
         return item
 
+    def delete_aggregate_group(self, item: AggregateCoverage) -> None:
+        key = aggregate_group_key(item)
+        self.aggregates = [candidate for candidate in self.aggregates if aggregate_group_key(candidate) != key]
+        self.raw_aggregate_candidates = [
+            candidate for candidate in self.raw_aggregate_candidates
+            if aggregate_group_key(candidate) != key
+        ]
+        self.aggregate_conflict_warnings = [
+            warning for warning in self.aggregate_conflict_warnings if f"'{key}'" not in warning
+        ]
+
 
 def parse_optional_int(text: str) -> int | None:
     value = text.strip().replace(",", "").replace("원", "")
     if not value or value == "정보 없음":
         return None
     return int(value)
+
+
+def parse_optional_date(text: str) -> date | None:
+    value = text.strip()
+    if not value or value == "정보 없음":
+        return None
+    return date.fromisoformat(value)
 
 
 def parse_cause(text: str) -> CauseType:

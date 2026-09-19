@@ -7,6 +7,7 @@ from dental_coverage_analyzer.models import (
     AggregateCoverage, CauseType, Confidence, CustomerInfo, DentalRider, InsuranceContract,
     PaymentUnit, SourceReference, ValidationIssue, ValidationSeverity,
 )
+from dental_coverage_analyzer.branding import BrandingSettings
 from dental_coverage_analyzer.reports import (
     DISCLAIMER, build_report_data, export_report_pdf, plan_report_pages, render_report_html,
     select_representative_aggregates,
@@ -222,6 +223,47 @@ def test_long_comment_gets_dedicated_pages_without_being_dropped():
     comment_pages = [page for page in plans if page.comment]
     assert len(comment_pages) >= 2
     assert "\n".join(page.comment for page in comment_pages) == comment
+
+
+def test_branding_reserves_a_dedicated_shorter_comment_page():
+    comment = "\n".join(f"브랜드 상담 메모 {index}" for index in range(28))
+    customer, aggregates, contracts, riders = sample_data()
+    data = build_report_data(
+        customer, aggregates, contracts, riders, comment=comment,
+        branding=BrandingSettings(
+            company_name="가상 컨설팅", consultant_name="홍길동",
+            phone="010-1234-5678", footer_text="상담 문의\n보험증권을 확인해 주세요.",
+        ),
+    )
+    plans = plan_report_pages(data)
+    comment_pages = [page for page in plans if page.comment]
+    assert all(page.kind == "comment" for page in comment_pages)
+    assert all(len(page.comment.splitlines()) <= 14 for page in comment_pages)
+    assert "\n".join(page.comment for page in comment_pages) == comment
+
+
+def test_pdf_export_with_long_comment_and_branding_smoke(tmp_path: Path, monkeypatch):
+    pytest.importorskip("PySide6", reason="PySide6가 필요한 PDF layout regression test")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        pytest.skip(f"Qt system library를 사용할 수 없음: {exc}")
+    app = QApplication.instance() or QApplication([])
+    customer, aggregates, contracts, riders = sample_data()
+    data = build_report_data(
+        customer, aggregates, contracts, riders,
+        comment="\n".join(f"긴 상담 코멘트 {index}" for index in range(30)),
+        branding=BrandingSettings(
+            company_name="가상 컨설팅", consultant_name="홍길동",
+            phone="010-1234-5678", email="advisor@example.com",
+            footer_text="상담 문의\n가입 전 보험증권과 약관을 확인해 주세요.",
+        ),
+    )
+    output = export_report_pdf(data, tmp_path / "comment-branding.pdf")
+    assert output.read_bytes().startswith(b"%PDF")
+    assert output.stat().st_size > 1000
+    del app
 
 
 def test_pdf_comment_text_smoke(tmp_path: Path, monkeypatch):

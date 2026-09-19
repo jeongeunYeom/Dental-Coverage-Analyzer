@@ -24,7 +24,7 @@ from dental_coverage_analyzer.reports.theme import CATEGORY_COLORS, DEFAULT_COLO
 
 from .session import (
     AnalysisSession, cause_label, optional_text, parse_cause, parse_optional_int,
-    parse_payment_unit, payment_label,
+    parse_optional_date, parse_payment_unit, payment_label,
 )
 from .project_store import (
     FutureProjectVersionError, ProjectError, autosave_path, delete_autosave,
@@ -397,8 +397,7 @@ class MainWindow(QMainWindow):
     def delete_aggregate(self):
         row = self.aggregate_table.currentRow()
         if row >= 0:
-            removed = self.session.aggregates.pop(row)
-            self.session.raw_aggregate_candidates = [item for item in self.session.raw_aggregate_candidates if item is not removed]
+            self.session.delete_aggregate_group(self.session.aggregates[row])
             self._fill_aggregates(); self._mark_dirty()
     def delete_rider(self):
         row = self.rider_table.currentRow()
@@ -412,7 +411,7 @@ class MainWindow(QMainWindow):
                 item.recommended_amount = parse_optional_int(self.aggregate_table.item(row, 2).text()); item.enrolled_amount = parse_optional_int(self.aggregate_table.item(row, 3).text())
                 item.shortage_amount = parse_optional_int(self.aggregate_table.item(row, 4).text()); item.normalized_shortage = item.shortage_amount; item.status = optional_text(self.aggregate_table.item(row, 5).text())
             for row, item in enumerate(self.dental_contracts):
-                item.insurer = optional_text(self.contract_table.item(row, 0).text()); item.product_name = optional_text(self.contract_table.item(row, 1).text()); item.coverage_period = optional_text(self.contract_table.item(row, 3).text())
+                item.insurer = optional_text(self.contract_table.item(row, 0).text()); item.product_name = optional_text(self.contract_table.item(row, 1).text()); item.enrollment_date = parse_optional_date(self.contract_table.item(row, 2).text()); item.coverage_period = optional_text(self.contract_table.item(row, 3).text())
                 item.monthly_premium = parse_optional_int(self.contract_table.item(row, 4).text()); item.payment_period = optional_text(self.contract_table.item(row, 5).text()); item.payment_cycle = optional_text(self.contract_table.item(row, 6).text()); item.maturity = optional_text(self.contract_table.item(row, 7).text())
             for row, item in enumerate(self.session.riders):
                 item.raw_name = self.rider_table.item(row, 0).text(); item.category = optional_text(self.rider_table.item(row, 1).text()); item.insurer = optional_text(self.rider_table.item(row, 2).text()); item.product_name = optional_text(self.rider_table.item(row, 3).text())
@@ -617,6 +616,14 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         if not self._confirm_unsaved_changes():
             event.ignore(); return
+        if self.worker and self.worker.isRunning():
+            self.worker.requestInterruption()
+            if not self.worker.wait(5_000):
+                QMessageBox.information(
+                    self, "분석 종료 중",
+                    "진행 중인 분석을 안전하게 종료하고 있습니다. 잠시 후 다시 종료해 주세요.",
+                )
+                event.ignore(); return
         if not self._deferred_autosave:
             delete_autosave()
         event.accept()
