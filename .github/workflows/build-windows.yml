@@ -1,0 +1,71 @@
+name: Build Windows MVP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-windows:
+    timeout-minutes: 20
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -e ".[build]"
+      - name: Prepare bundled Tesseract OCR
+        shell: pwsh
+        run: scripts/prepare_tesseract_windows.ps1
+      - name: Generate application icon
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/build_icon.py
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -vv --durations=20 --timeout=120
+      - name: Test bundled OCR
+        env:
+          DCA_BUNDLED_OCR_TEST: "1"
+          DCA_TESSERACT_ROOT: ${{ github.workspace }}\build\vendor\tesseract
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -vv tests/test_bundled_ocr_integration.py --timeout=120
+      - name: Generate Windows metadata
+        run: python scripts/generate_windows_metadata.py
+      - name: Build onedir application
+        run: python -m PyInstaller --noconfirm --clean DentalCoverageAnalyzer.spec
+      - name: Smoke test built application
+        run: dist\DentalCoverageAnalyzer\DentalCoverageAnalyzer.exe --health-check
+      - name: Create distribution ZIP
+        shell: pwsh
+        run: |
+          $version = python scripts/generate_windows_metadata.py
+          Compress-Archive -Path dist\DentalCoverageAnalyzer\* -DestinationPath "DentalCoverageAnalyzer-Windows-Portable-$version.zip" -Force
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.2.2 --yes --no-progress --require-checksums
+      - name: Build installer
+        shell: cmd
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\DentalCoverageAnalyzer.iss'
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $version = python scripts/generate_windows_metadata.py
+          if (-not (Test-Path "dist\installer\DentalCoverageAnalyzer-Setup-$version.exe")) { throw "Installer was not created" }
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalCoverageAnalyzer-Windows-Portable
+          path: DentalCoverageAnalyzer-Windows-Portable-*.zip
+          if-no-files-found: error
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalCoverageAnalyzer-Windows-Installer
+          path: dist/installer/DentalCoverageAnalyzer-Setup-*.exe
+          if-no-files-found: error
